@@ -53,7 +53,7 @@ indexer2.index(iter(cache))
 ```
 
 <details>
-<summary>👁‍🗨 More Details</summary>
+<summary>👁‍ More Details</summary>
 
 `IndexerCache` currently has one implementation, `Lz4PickleIndexerCache`, which is
 set as the default. `Lz4PickleIndexerCache` saves the sequence as a sequence of
@@ -129,7 +129,7 @@ another_cached_pipeline(dataset.get_topics())
 ```
 
 <details>
-<summary>👁‍🗨 More Details</summary>
+<summary>👁‍ More Details</summary>
 
 `ScorerCache` currently has one implementation, `Hdf5ScorerCache`, which is
 set as the default. `Hdf5ScorerCache` saves scores in an HDF5 file.
