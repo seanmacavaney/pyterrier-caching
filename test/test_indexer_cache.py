@@ -7,7 +7,7 @@ import pyterrier_caching
 class TestIndexerCache(unittest.TestCase):
     def setUp(self):
         if not pt.started():
-            pt.init(version='5.8', helper_version='0.0.8')
+            pt.init()
 
     def test_basic(self):
         with tempfile.TemporaryDirectory() as d:
@@ -20,26 +20,32 @@ class TestIndexerCache(unittest.TestCase):
                 {'docno': '4', 'data': 'information retrieval'},
                 {'docno': '5', 'data': 'foo bar baz'},
             ])
-            self.assertEqual(list(cache), [
-                {'docno': '1', 'data': 'test'},
-                {'docno': '2', 'data': 'caching pyterrier'},
-                {'docno': '3', 'data': 'fetch me some data'},
-                {'docno': '4', 'data': 'information retrieval'},
-                {'docno': '5', 'data': 'foo bar baz'},
-            ])
-            self.assertEqual(list(cache.get_corpus_iter(start=2)), [
-                {'docno': '3', 'data': 'fetch me some data'},
-                {'docno': '4', 'data': 'information retrieval'},
-                {'docno': '5', 'data': 'foo bar baz'},
-            ])
-            self.assertEqual(list(cache.get_corpus_iter(stop=2)), [
-                {'docno': '1', 'data': 'test'},
-                {'docno': '2', 'data': 'caching pyterrier'},
-            ])
-            self.assertEqual(list(cache.get_corpus_iter(start=1, stop=3)), [
-                {'docno': '2', 'data': 'caching pyterrier'},
-                {'docno': '3', 'data': 'fetch me some data'},
-            ])
+            with self.subTest('full iter'):
+                self.assertEqual(list(cache), [
+                    {'docno': '1', 'data': 'test'},
+                    {'docno': '2', 'data': 'caching pyterrier'},
+                    {'docno': '3', 'data': 'fetch me some data'},
+                    {'docno': '4', 'data': 'information retrieval'},
+                    {'docno': '5', 'data': 'foo bar baz'},
+                ])
+            with self.subTest('start only'):
+                self.assertEqual(list(cache.get_corpus_iter(start=2)), [
+                    {'docno': '3', 'data': 'fetch me some data'},
+                    {'docno': '4', 'data': 'information retrieval'},
+                    {'docno': '5', 'data': 'foo bar baz'},
+                ])
+            with self.subTest('stop only'):
+                self.assertEqual(list(cache.get_corpus_iter(stop=2)), [
+                    {'docno': '1', 'data': 'test'},
+                    {'docno': '2', 'data': 'caching pyterrier'},
+                ])
+            with self.subTest('start and stop'):
+                self.assertEqual(list(cache.get_corpus_iter(start=1, stop=3)), [
+                    {'docno': '2', 'data': 'caching pyterrier'},
+                    {'docno': '3', 'data': 'fetch me some data'},
+                ])
+            with self.subTest('empty'):
+                self.assertEqual(list(cache.get_corpus_iter(start=3, stop=1)), [])
 
     def test_empty(self):
         with tempfile.TemporaryDirectory() as d:
