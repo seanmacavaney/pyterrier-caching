@@ -19,6 +19,7 @@ setuptools.setup(
     description='Caching components for PyTerrier',
     long_description=open('README.md', 'rt').read(),
     long_description_content_type='text/markdown',
+    license='MIT',
     packages=setuptools.find_packages(),
     install_requires=list(open('requirements.txt', 'rt')),
     python_requires='>=3.6',
