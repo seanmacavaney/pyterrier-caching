@@ -96,9 +96,12 @@ class Hdf5ScorerCache(pt.Transformer):
         if qid not in self.dataset_cache:
             if qid not in self.file:
                 self._ensure_write_mode()
-                # TODO: setting chunks=(4096,) --- or some other value? --- might help
-                # reduce the file size and/or speed up writes? Investigate more...
-                self.file.create_dataset(qid, shape=(self.corpus_count(),), dtype=np.float32, fillvalue=float('nan'))
+                corpus_count = self.corpus_count()
+                if corpus_count > 4096:
+                    chunks = (4096,)
+                else:
+                    chunks = None
+                self.file.create_dataset(qid, shape=(self.corpus_count(),), chunks=chunks, dtype=np.float32, fillvalue=float('nan'))
             self.dataset_cache[qid] = self.file[qid]
         return self.dataset_cache[qid]
 
