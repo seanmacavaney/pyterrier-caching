@@ -1,0 +1,5 @@
+python-terrier
+lz4
+numpy
+npids
+h5py
