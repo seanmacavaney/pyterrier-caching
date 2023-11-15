@@ -116,7 +116,7 @@ if not cached_scorer.built():
     # This will be faster than iterating over the entire corpus, especially for
     # large datasets.
 
-# Use the IndexerCache cache object just as you would an indexer
+# Use the ScorerCache cache object just as you would a scorer
 cached_pipeline = MyFirstStage() >> cached_scorer
 
 cached_pipeline(dataset.get_topics())
@@ -133,6 +133,54 @@ another_cached_pipeline(dataset.get_topics())
 
 `ScorerCache` currently has one implementation, `Hdf5ScorerCache`, which is
 set as the default. `Hdf5ScorerCache` saves scores in an HDF5 file.
+
+</details>
+
+
+## Caching Results from a Retriever
+
+`RetrieverCache` saves the retrieved results based on the `query` (or another field
+specified via the `on` argument). When the `query` is encountered again, the value is
+read from the cache, avoiding retrieving again.
+
+**Example use case:** I want to test several different re-ranking models over the same
+initial set of documents, and I want to save time by not re-running the queries each time.
+
+You use a `RetrieverCache` in place of the retriever in a pipeline. It holds a reference to
+the retriever so that it can retrieve results for queries that are missing from the cache.
+
+**⚠️ Important Caveats**:
+ - `RetrieverCache` saves scores based on **only** the value of `query` (or the field
+   specified via `on`).
+ - We have not yet tested using multiple processes or threads. YMMV.
+ - A `ScorerCache` represents the cross between a retriever and a corpus. Do not try to use a
+   single cache across multiple retrievers or corpora -- you'll get unexpected/invalid results.
+
+Example:
+
+```python
+import pyterrier as pt
+pt.init()
+from pyterrier_caching import RetrieverCache
+
+# Setup
+cached_retriever = RetrieverCache('path/to/cache', MyRetriever())
+dataset = pt.get_dataset('some-dataset') # e.g., 'irds:msmarco-passage'
+
+# Use the RetrieverCache cache object just as you would a retriever
+cached_pipeline = cached_retriever >> MySecondStage()
+
+cached_pipeline(dataset.get_topics())
+# Will be faster when you run it a second time, since all values are cached
+cached_pipeline(dataset.get_topics())
+```
+
+<details>
+<summary>👁‍ More Details</summary>
+
+`RetrieverCache` currently has one implementation, `ShelveScorerCache`, which is
+set as the default. `ShelveScorerCache` saves results as a
+[`shelve`](https://docs.python.org/3/library/shelve.html) file.
 
 </details>
 
