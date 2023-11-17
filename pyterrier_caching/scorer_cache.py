@@ -18,10 +18,11 @@ class Hdf5ScorerCache(pt.Transformer):
     artefact_type = 'scorer_cache'
     artefact_format = 'hdf5'
 
-    def __init__(self, path, scorer=None):
+    def __init__(self, path, scorer=None, verbose=False):
         self.mode = 'r'
         self.path = Path(path)
         self.scorer = scorer
+        self.verbose = verbose
         self.meta = None
         self.file = None
         self.docnos = None
@@ -30,6 +31,7 @@ class Hdf5ScorerCache(pt.Transformer):
     def transform(self, inp):
         self._ensure_built()
         results = []
+        misses = 0
         for query, group in inp.groupby('query'):
             query_hash = hashlib.sha256(query.encode()).hexdigest()
             ds = self._get_dataset(query_hash)
@@ -37,6 +39,7 @@ class Hdf5ScorerCache(pt.Transformer):
             dids_sorted, undo_did_sort = np.unique(dids, return_inverse=True)
             scores = ds[dids_sorted][undo_did_sort]
             to_score = group.loc[group.docno[np.isnan(scores)].index]
+            misses += len(to_score)
             if len(to_score) > 0:
                 self._ensure_write_mode()
                 ds = self._get_dataset(query_hash)
@@ -50,6 +53,8 @@ class Hdf5ScorerCache(pt.Transformer):
             results.append(group.assign(score=scores))
         results = pd.concat(results, ignore_index=True)
         pt.model.add_ranks(results)
+        if self.verbose:
+            print(f"{self}: {len(inp)-misses} hit(s), {misses} miss(es)")
         return results
 
     def built(self) -> bool:
@@ -105,6 +110,10 @@ class Hdf5ScorerCache(pt.Transformer):
     def corpus_count(self):
         self._ensure_built()
         return self.meta['doc_count']
+
+    def __repr__(self):
+        return f'Hdf5ScorerCache({repr(str(self.path))}, {self.scorer})'
+
 
 # Default implementation of ScorerCache: Hdf5ScorerCache
 ScorerCache = Hdf5ScorerCache

@@ -128,6 +128,9 @@ another_cached_pipeline = AnotherFirstStage() >> cached_scorer
 another_cached_pipeline(dataset.get_topics())
 ```
 
+Concrete Examples:
+ - [examples/scorer_monot5.py](examples/scorer_monot5.py)
+
 <details>
 <summary>👁‍ More Details</summary>
 
