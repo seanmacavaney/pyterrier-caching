@@ -116,3 +116,6 @@ terrier-python-helper/target/
 terrier-python-helper/.settings
 *jar
 logs/
+
+# misc
+*.cache
