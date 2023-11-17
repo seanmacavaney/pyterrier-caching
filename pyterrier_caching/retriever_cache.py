@@ -80,7 +80,7 @@ class DbmRetrieverCache(pt.Transformer):
             self.file = None
             self.file_name = None
         if self.file is None:
-            self.file = dbm.dumb.open(fname, 'r')
+            self.file = dbm.dumb.open(fname, 'c')
             self.file_name = fname
         if self.meta is None:
             with (self.path/'meta.json').open('rt') as fin:
