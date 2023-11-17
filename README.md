@@ -52,6 +52,9 @@ indexer2 = ... # e.g., pyterrier_pisa.PisaIndex('./path/to/index.pisa')
 indexer2.index(iter(cache))
 ```
 
+Concrete Examples:
+ - [examples/indexer_splade.py](examples/indexer_splade.py)
+
 <details>
 <summary>👁‍ More Details</summary>
 
