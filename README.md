@@ -52,6 +52,9 @@ indexer2 = ... # e.g., pyterrier_pisa.PisaIndex('./path/to/index.pisa')
 indexer2.index(iter(cache))
 ```
 
+Concrete Examples:
+ - [examples/indexer_splade.py](examples/indexer_splade.py)
+
 <details>
 <summary>👁‍ More Details</summary>
 
@@ -127,6 +130,9 @@ cached_pipeline(dataset.get_topics())
 another_cached_pipeline = AnotherFirstStage() >> cached_scorer
 another_cached_pipeline(dataset.get_topics())
 ```
+
+Concrete Examples:
+ - [examples/scorer_monot5.py](examples/scorer_monot5.py)
 
 <details>
 <summary>👁‍ More Details</summary>
