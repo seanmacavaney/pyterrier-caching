@@ -176,6 +176,9 @@ cached_pipeline(dataset.get_topics())
 cached_pipeline(dataset.get_topics())
 ```
 
+Concrete Examples:
+ - [examples/retriever_bm25.py](examples/retriever_bm25.py)
+
 <details>
 <summary>👁‍ More Details</summary>
 
