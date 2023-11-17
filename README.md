@@ -139,9 +139,8 @@ set as the default. `Hdf5ScorerCache` saves scores in an HDF5 file.
 
 ## Caching Results from a Retriever
 
-`RetrieverCache` saves the retrieved results based on the `query` (or another field
-specified via the `on` argument). When the `query` is encountered again, the value is
-read from the cache, avoiding retrieving again.
+`RetrieverCache` saves the retrieved results based on the fields of each row. When the
+same row is encountered again, the value is read from the cache, avoiding retrieving again.
 
 **Example use case:** I want to test several different re-ranking models over the same
 initial set of documents, and I want to save time by not re-running the queries each time.
@@ -150,9 +149,11 @@ You use a `RetrieverCache` in place of the retriever in a pipeline. It holds a r
 the retriever so that it can retrieve results for queries that are missing from the cache.
 
 **⚠️ Important Caveats**:
- - `RetrieverCache` saves scores based on **only** the value of `query` (or the field
-   specified via `on`).
- - We have not yet tested using multiple processes or threads. YMMV.
+ - `RetrieverCache` saves scores based on **all** the input columns by default. Changes in
+   any of the values will result in a cache miss, even if the column does not affect the
+   retriever's output. You can specify a subset of columns using the `on` parameter.
+ - DBM does not support concurrent reads/writes from multiple threads or processes. Keep only
+   a single `RetrieverCache` pointing to a cache file location open at a time.
  - A `ScorerCache` represents the cross between a retriever and a corpus. Do not try to use a
    single cache across multiple retrievers or corpora -- you'll get unexpected/invalid results.
 
@@ -178,9 +179,9 @@ cached_pipeline(dataset.get_topics())
 <details>
 <summary>👁‍ More Details</summary>
 
-`RetrieverCache` currently has one implementation, `ShelveScorerCache`, which is
-set as the default. `ShelveScorerCache` saves results as a
-[`shelve`](https://docs.python.org/3/library/shelve.html) file.
+`RetrieverCache` currently has one implementation, `DbmScorerCache`, which is
+set as the default. `DbmScorerCache` saves results as a
+[`dbm`](https://docs.python.org/3/library/dbm.html) file.
 
 </details>
 
