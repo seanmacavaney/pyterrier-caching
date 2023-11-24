@@ -85,7 +85,10 @@ the string `docno` and the integer indexes at which the scores values are stored
 
 **⚠️ Important Caveats**:
  - `ScorerCache` saves scores based on **only** the value of the `query` and `docno`. All
-   other information is ignored (e.g., the text of the document).
+   other information is ignored (e.g., the text of the document). Note that this strategy
+   makes it suitable only when each score only depends on the `query` and `docno` of a single
+   record (e.g., Mono-style models) and not cases that perform pairwise or listwise scoring
+   (e.g, Duo-style models).
  - `ScorerCache` only stores the result of the `score` column. All other outputs of the
    scorer will be discarded. (Rank is also outputed, but is caculated by `ScorerCache`,
    not the scorer.)
