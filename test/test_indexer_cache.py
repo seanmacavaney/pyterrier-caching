@@ -14,7 +14,8 @@ class TestIndexerCache(unittest.TestCase):
             d = Path(d)
             cache = pyterrier_caching.IndexerCache(d/'cache')
             with self.subTest('len before built'):
-                self.assertEqual(len(cache), None)
+                with self.assertRaises(RuntimeError):
+                    len(cache)
             cache.index([
                 {'docno': '1', 'data': 'test'},
                 {'docno': '2', 'data': 'caching pyterrier'},
