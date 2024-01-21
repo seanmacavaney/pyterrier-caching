@@ -29,10 +29,11 @@ class Lz4PickleIndexerCache(pt.Indexer):
         return self.get_corpus_iter()
 
     def __len__(self) -> Optional[int]:
-        if self.built():
-            with  (Path(self.path)/'meta.json').open('rt') as fin:
-                metadata = json.load(fin)
-            return metadata['record_count']
+        if not self.built():
+            raise RuntimeError('cache not built')
+        with  (Path(self.path)/'meta.json').open('rt') as fin:
+            metadata = json.load(fin)
+        return metadata['record_count']
 
     def get_corpus_iter(self, verbose: bool = False, fields: Optional[List[str]] = None, start: Optional[int] = None, stop: Optional[int] = None) -> Iterator[Dict[str, Any]]:
         # validate arguments
