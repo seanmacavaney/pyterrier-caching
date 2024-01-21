@@ -13,7 +13,7 @@ class TestIndexerCache(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             cache = pyterrier_caching.IndexerCache(d/'cache')
-            with self.subText('len before built'):
+            with self.subTest('len before built'):
                 self.assertEqual(len(cache), None)
             cache.index([
                 {'docno': '1', 'data': 'test'},
@@ -22,7 +22,7 @@ class TestIndexerCache(unittest.TestCase):
                 {'docno': '4', 'data': 'information retrieval'},
                 {'docno': '5', 'data': 'foo bar baz'},
             ])
-            with self.subText('len when built'):
+            with self.subTest('len when built'):
                 self.assertEqual(len(cache), 5)
             with self.subTest('full iter'):
                 self.assertEqual(list(cache), [
@@ -56,7 +56,7 @@ class TestIndexerCache(unittest.TestCase):
             d = Path(d)
             cache = pyterrier_caching.IndexerCache(d/'cache')
             cache.index(range(0))
-            with self.subText('len'):
+            with self.subTest('len'):
                 self.assertEqual(len(cache), 0)
-            with self.subText('iter'):
+            with self.subTest('iter'):
                 self.assertEqual(list(cache), [])
