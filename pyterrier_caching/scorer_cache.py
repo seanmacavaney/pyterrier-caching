@@ -161,7 +161,7 @@ class Hdf5SparseScorerCache(pt.Transformer):
                 ds_idxs[:] = new_all_idxs[sort_idxs]
                 ds_vals[:] = new_all_vals[sort_idxs]
                 ds_idxs, ds_vals = ds_idxs[:], ds_vals[:]
-                self.dataset_vec_cache[qid] = (ds_idxs, ds_vals)
+                self.dataset_vec_cache[query_hash] = (ds_idxs, ds_vals)
                 search_idxs = np.searchsorted(ds_idxs, dids_sorted)
                 search_idxs_sorted, undo_search_idxs_sorted = np.unique(search_idxs, return_inverse=True)
                 assert (ds_idxs[search_idxs_sorted][undo_search_idxs_sorted] == dids_sorted).all()
