@@ -1,4 +1,5 @@
 python-terrier
+pyterrier-alpha>=0.2.0
 lz4
 numpy
 npids

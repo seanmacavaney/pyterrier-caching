@@ -1,26 +1,23 @@
-from typing import Optional, List, Iterator, Dict, Any, Union
 from pathlib import Path
-from contextlib import ExitStack
-import struct
 import hashlib
-import pickle
-import lz4.frame
 import numpy as np
 import pandas as pd
 import pyterrier as pt
 import shutil
 import json
 from npids import Lookup
-from pyterrier_caching import BuilderMode, artefact_builder
+from pyterrier_caching import BuilderMode, artifact_builder, meta_file_compat
+import pyterrier_alpha as pta
 
 
-class Hdf5ScorerCache(pt.Transformer):
-    artefact_type = 'scorer_cache'
-    artefact_format = 'hdf5'
+class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
+    artifact_type = 'scorer_cache'
+    artifact_format = 'hdf5'
 
     def __init__(self, path, scorer=None, verbose=False):
+        super().__init__(path)
+        meta_file_compat(path)
         self.mode = 'r'
-        self.path = Path(path)
         self.scorer = scorer
         self.verbose = verbose
         self.meta = None
@@ -29,42 +26,16 @@ class Hdf5ScorerCache(pt.Transformer):
         self.dataset_cache = {}
 
     def transform(self, inp):
-        self._ensure_built()
-        results = []
-        misses = 0
-        for query, group in inp.groupby('query'):
-            query_hash = hashlib.sha256(query.encode()).hexdigest()
-            ds = self._get_dataset(query_hash)
-            dids = self.docnos.inv[np.array(group.docno)]
-            dids_sorted, undo_did_sort = np.unique(dids, return_inverse=True)
-            scores = ds[dids_sorted][undo_did_sort]
-            to_score = group.loc[group.docno[np.isnan(scores)].index]
-            misses += len(to_score)
-            if len(to_score) > 0:
-                self._ensure_write_mode()
-                ds = self._get_dataset(query_hash)
-                new_scores = self.scorer(to_score)
-                dids = self.docnos.inv[np.array(new_scores.docno)]
-                dids_sorted, dids_sorted_idx = np.unique(dids, return_index=True)
-                ds[dids_sorted] = new_scores.score.iloc[dids_sorted_idx]
-                dids = self.docnos.inv[np.array(group.docno)]
-                dids_sorted, undo_did_sort = np.unique(dids, return_inverse=True)
-                scores = ds[dids_sorted][undo_did_sort]
-            results.append(group.assign(score=scores))
-        results = pd.concat(results, ignore_index=True)
-        pt.model.add_ranks(results)
-        if self.verbose:
-            print(f"{self}: {len(inp)-misses} hit(s), {misses} miss(es)")
-        return results
+        return self.scorer()(inp)
 
     def built(self) -> bool:
-        return (Path(self.path)/'meta.json').exists()
+        return (Path(self.path)/'pt_meta.json').exists()
 
     def build(self, corpus_iter=None, docnos_file=None):
         assert not self.built(), "this cache is alrady built"
         assert corpus_iter is not None or docnos_file is not None
         import h5py
-        with artefact_builder(self.path, BuilderMode.create, self.artefact_type, self.artefact_format) as builder:
+        with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format) as builder:
             with h5py.File(str(builder.path/'data.h5'), 'a'):
                 pass # just create the data file
             if docnos_file:
@@ -83,7 +54,7 @@ class Hdf5ScorerCache(pt.Transformer):
         if self.file is None:
             self.file = h5py.File(self.path/'data.h5', self.mode)
         if self.meta is None:
-            with (self.path/'meta.json').open('rt') as fin:
+            with (self.path/'pt_meta.json').open('rt') as fin:
                 self.meta = json.load(fin)
         if self.docnos is None:
             self.docnos = Lookup(self.path/'docnos.npids')
@@ -113,6 +84,76 @@ class Hdf5ScorerCache(pt.Transformer):
 
     def __repr__(self):
         return f'Hdf5ScorerCache({repr(str(self.path))}, {self.scorer})'
+
+    def scorer(self) -> pt.Transformer:
+        return Hdf5ScorerCacheScorer(self)
+
+    def retriever(self, num_results: int = 1000) -> pt.Transformer:
+        return Hdf5ScorerCacheRetriever(self, num_results)
+
+
+class Hdf5ScorerCacheScorer(pt.Transformer):
+    def __init__(self, cache: Hdf5ScorerCache):
+        self.cache = cache
+
+    def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
+        self.cache._ensure_built()
+        results = []
+        misses = 0
+        for query, group in inp.groupby('query'):
+            query_hash = hashlib.sha256(query.encode()).hexdigest()
+            ds = self.cache._get_dataset(query_hash)
+            dids = self.cache.docnos.inv[np.array(group.docno)]
+            dids_sorted, undo_did_sort = np.unique(dids, return_inverse=True)
+            scores = ds[dids_sorted][undo_did_sort]
+            to_score = group.loc[group.docno[np.isnan(scores)].index]
+            misses += len(to_score)
+            if len(to_score) > 0:
+                self.cache._ensure_write_mode()
+                ds = self.cache._get_dataset(query_hash)
+                new_scores = self.cache.scorer(to_score)
+                dids = self.cache.docnos.inv[np.array(new_scores.docno)]
+                dids_sorted, dids_sorted_idx = np.unique(dids, return_index=True)
+                ds[dids_sorted] = new_scores.score.iloc[dids_sorted_idx]
+                dids = self.cache.docnos.inv[np.array(group.docno)]
+                dids_sorted, undo_did_sort = np.unique(dids, return_inverse=True)
+                scores = ds[dids_sorted][undo_did_sort]
+            results.append(group.assign(score=scores))
+        results = pd.concat(results, ignore_index=True)
+        pt.model.add_ranks(results)
+        if self.cache.verbose:
+            print(f"{self}: {len(inp)-misses} hit(s), {misses} miss(es)")
+        return results
+
+
+class Hdf5ScorerCacheRetriever(pt.Transformer):
+    def __init__(self, cache: Hdf5ScorerCache, num_results: int = 1000):
+        self.cache = cache
+        self.num_results = num_results
+
+    def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
+        self.cache._ensure_built()
+        pta.validate.query_frame(inp, extra_columns=['query'])
+        inp = inp.reset_index(drop=True)
+        builder = pta.DataFrameBuilder(['_index', 'docno', 'score', 'rank'])
+        for i, query in enumerate(inp['query']):
+            query_hash = hashlib.sha256(query.encode()).hexdigest()
+            ds = self.cache._get_dataset(query_hash)[:]
+            docids = ds.argpartition(-self.num_results)[-self.num_results:]
+            scores = ds[docids]
+            if np.isnan(scores).any():
+                raise RuntimeError(f'retriever only works if corpus is scored completely for this query; at least one missing document found for query {query!r}.')
+            idxs = scores.argsort()[::-1]
+            docids = docids[idxs]
+            scores = scores[idxs]
+            docnos = self.cache.docnos.fwd[docids]
+            builder.extend({
+                '_index': i,
+                'docno': docnos,
+                'score': scores,
+                'rank': np.arange(scores.shape[0])
+            })
+        return builder.to_df(merge_on_index=inp)
 
 
 # Default implementation of ScorerCache: Hdf5ScorerCache
