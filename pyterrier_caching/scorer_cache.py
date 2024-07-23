@@ -26,7 +26,7 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
         self.dataset_cache = {}
 
     def transform(self, inp):
-        return self.scorer()(inp)
+        return self.cached_scorer()(inp)
 
     def built(self) -> bool:
         return (Path(self.path)/'pt_meta.json').exists()
@@ -85,10 +85,10 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
     def __repr__(self):
         return f'Hdf5ScorerCache({repr(str(self.path))}, {self.scorer})'
 
-    def scorer(self) -> pt.Transformer:
+    def cached_scorer(self) -> pt.Transformer:
         return Hdf5ScorerCacheScorer(self)
 
-    def retriever(self, num_results: int = 1000) -> pt.Transformer:
+    def cached_retriever(self, num_results: int = 1000) -> pt.Transformer:
         return Hdf5ScorerCacheRetriever(self, num_results)
 
 
