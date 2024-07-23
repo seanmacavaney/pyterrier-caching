@@ -34,3 +34,18 @@ class Lazy(pt.Transformer):
 
     def unload(self):
         self.transformer = None
+
+
+def meta_file_compat(path):
+    """
+    Until version 0.1.0, pt_meta.json was called meta.json. To ensure compatiblity between caches created with
+    version <0.1.0 and >=0.1.0, this method moves meta.json to pt_meta.json and linkns meta.json -> pt_meta.json.
+
+    The end effect is that caches created with version <0.1.0 will be compatible with >=0.1.0, but caches created
+    with >=0.1.0 will NOT be compatible with those created with <0.1.0.
+    """
+    path = Path(path)
+    if (old_path := (path/'meta.json')).exists() and \
+       not (new_path := (path/'pt_meta.json')).exists():
+        old_path.rename(new_path)
+        old_path.symlink_to(new_path)

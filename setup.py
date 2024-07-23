@@ -2,7 +2,6 @@ import setuptools
 
 
 def get_version(path):
-    import os
     for line in open(path, 'rt'):
         if line.startswith('__version__'):
             delim = '"' if '"' in line else "'"
@@ -22,5 +21,12 @@ setuptools.setup(
     license='MIT',
     packages=setuptools.find_packages(),
     install_requires=list(open('requirements.txt', 'rt')),
-    python_requires='>=3.6',
+    python_requires='>=3.8',
+    entry_points={
+        'pyterrier.artifact': [
+            'indexer_cache.lz4pickle = pyterrier_caching:Lz4PickleIndexerCache',
+            'retriever_cache.dbm.dumb = pyterrier_caching:DbmRetrieverCache',
+            'scorer_cache.hdf5 = pyterrier_caching:Hdf5ScorerCache',
+        ],
+    },
 )

@@ -7,28 +7,30 @@ import pyterrier as pt
 import pickle
 import json
 import dbm.dumb
-from pyterrier_caching import BuilderMode, artefact_builder
+import pyterrier_alpha as pta
+from pyterrier_caching import BuilderMode, artifact_builder, meta_file_compat
 
 
-class DbmRetrieverCache(pt.Transformer):
-    artefact_type = 'retriever_cache'
-    artefact_format = 'dbm.dumb'
+class DbmRetrieverCache(pta.Artifact, pt.Transformer):
+    artifact_type = 'retriever_cache'
+    artifact_format = 'dbm.dumb'
 
     def __init__(self,
                  path: Union[str, Path],
                  retriever: Optional[pt.Transformer] = None,
                  on: Optional[str] = None,
                  verbose: bool = False):
+        super().__init__(path)
+        meta_file_compat(path)
         self.on = on
-        self.path = Path(path)
         self.retriever = retriever
         self.verbose = verbose
         self.meta = None
         self.file = None
         self.file_name = None
-        if not (Path(self.path)/'meta.json').exists():
-            with artefact_builder(self.path, BuilderMode.create, self.artefact_type, self.artefact_format) as builder:
-                pass # just create the artefact
+        if not (Path(self.path)/'pt_meta.json').exists():
+            with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format) as builder:
+                pass # just create the artifact
 
     def transform(self, inp):
         if self.on is not None:
@@ -83,10 +85,10 @@ class DbmRetrieverCache(pt.Transformer):
             self.file = dbm.dumb.open(fname, 'c')
             self.file_name = fname
         if self.meta is None:
-            with (self.path/'meta.json').open('rt') as fin:
+            with (self.path/'pt_meta.json').open('rt') as fin:
                 self.meta = json.load(fin)
-        assert self.meta['type'] == self.artefact_type
-        assert self.meta['format'] == self.artefact_format
+        assert self.meta['type'] == self.artifact_type
+        assert self.meta['format'] == self.artifact_format
 
     def __repr__(self):
         return f'DbmRetrieverCache({repr(str(self.path))}, {self.retriever})'

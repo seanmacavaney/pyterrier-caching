@@ -4,26 +4,28 @@ from enum import Enum
 from pathlib import Path
 from contextlib import contextmanager
 
+
 class BuilderMode(Enum):
     create = 'create'
     overwrite = 'overwrite'
     append = 'append'
 
 
-class ArtefactBuilderState:
+class ArtifactBuilderState:
     def __init__(self, path, metadata=None):
         self.path = Path(path)
         self.metadata = metadata or {}
 
 
 @contextmanager
-def artefact_builder(path: Union[str, Path], mode: Union[BuilderMode, str], artefact_type: str, artefact_format: str):
+def artifact_builder(path: Union[str, Path], mode: Union[BuilderMode, str], artifact_type: str, artifact_format: str):
     mode = BuilderMode(mode)
     path = Path(path)
 
-    state = ArtefactBuilderState(path, metadata={
-        'type': artefact_type,
-        'format': artefact_format,
+    state = ArtifactBuilderState(path, metadata={
+        'type': artifact_type,
+        'format': artifact_format,
+        'package_hint': 'pyterrier-caching',
     })
 
     # TODO: check if the path exists and either:
@@ -49,8 +51,8 @@ def artefact_builder(path: Union[str, Path], mode: Union[BuilderMode, str], arte
         # TODO: clean up
         raise
 
-    # Log the artefact metadata
-    meta_path = path / 'meta.json'
+    # Log the artifact metadata
+    meta_path = path / 'pt_meta.json'
     try:
         with open(meta_path, 'wt') as fout:
             json.dump(state.metadata, fout)

@@ -1,7 +1,6 @@
 from typing import Optional, List, Iterator, Dict, Any, Union
 from pathlib import Path
 from contextlib import ExitStack
-import struct
 import pickle
 import json
 import lz4.frame
@@ -9,15 +8,18 @@ import numpy as np
 import pandas as pd
 import pyterrier as pt
 from npids import Lookup
-from pyterrier_caching import BuilderMode, closing_memmap, artefact_builder
+from tqdm import tqdm
+import pyterrier_alpha as pta
+from pyterrier_caching import BuilderMode, closing_memmap, artifact_builder, meta_file_compat
 
 
-class Lz4PickleIndexerCache(pt.Indexer):
-    artefact_type = 'indexer_cache'
-    artefact_format = 'lz4pickle'
+class Lz4PickleIndexerCache(pta.Artifact, pt.Indexer):
+    artifact_type = 'indexer_cache'
+    artifact_format = 'lz4pickle'
 
     def __init__(self, path: str):
-        self.path = path
+        super().__init__(path)
+        meta_file_compat(path)
 
     def indexer(self, mode: Union[str, BuilderMode] = BuilderMode.create, skip_docno_lookup: bool = False) -> pt.Indexer:
         return Lz4PickleIndexerCacheIndexer(self, mode, skip_docno_lookup=skip_docno_lookup)
@@ -31,7 +33,7 @@ class Lz4PickleIndexerCache(pt.Indexer):
     def __len__(self) -> Optional[int]:
         if not self.built():
             raise RuntimeError('cache not built')
-        with  (Path(self.path)/'meta.json').open('rt') as fin:
+        with (Path(self.path)/'pt_meta.json').open('rt') as fin:
             metadata = json.load(fin)
         return metadata['record_count']
 
@@ -79,7 +81,7 @@ class Lz4PickleIndexerCache(pt.Indexer):
         raise ValueError('unknown type for items: {}'.format(type(items)))
 
     def built(self) -> bool:
-        return (Path(self.path)/'meta.json').exists()
+        return (Path(self.path)/'pt_meta.json').exists()
 
 
 class Lz4PickleIndexerCacheIndexer(pt.Indexer):
@@ -91,7 +93,7 @@ class Lz4PickleIndexerCacheIndexer(pt.Indexer):
     def index(self, it: Iterator[Dict[str, Any]]) -> None:
         assert BuilderMode(self.mode) == BuilderMode.create, "Lz4PickleIndexerCache only supports 'create' mode"
         with ExitStack() as s:
-            builder = s.enter_context(artefact_builder(self.cache.path, self.mode, self.cache.artefact_type, self.cache.artefact_format))
+            builder = s.enter_context(artifact_builder(self.cache.path, self.mode, self.cache.artifact_type, self.cache.artifact_format))
             fdata = s.enter_context(open(builder.path/'data.pkl.lz4', mode='wb'))
             foffsets = s.enter_context(open(builder.path/'offsets.np', 'wb'))
             docno_lookup = False if self.skip_docno_lookup else None
