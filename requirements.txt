@@ -1,6 +1,6 @@
 python-terrier
 pyterrier-alpha>=0.2.0
 lz4
-numpy
+numpy<2.0.0
 npids
 h5py
