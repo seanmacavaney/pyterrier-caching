@@ -88,8 +88,8 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
     def cached_scorer(self) -> pt.Transformer:
         return Hdf5ScorerCacheScorer(self)
 
-    def cached_retriever(self, num_results: int = 1000, strict: bool = True) -> pt.Transformer:
-        return Hdf5ScorerCacheRetriever(self, num_results, strict)
+    def cached_retriever(self, num_results: int = 1000) -> pt.Transformer:
+        return Hdf5ScorerCacheRetriever(self, num_results)
 
 
 class Hdf5ScorerCacheScorer(pt.Transformer):
@@ -127,10 +127,9 @@ class Hdf5ScorerCacheScorer(pt.Transformer):
 
 
 class Hdf5ScorerCacheRetriever(pt.Transformer):
-    def __init__(self, cache: Hdf5ScorerCache, num_results: int = 1000, strict: bool = True):
+    def __init__(self, cache: Hdf5ScorerCache, num_results: int = 1000):
         self.cache = cache
         self.num_results = num_results
-        self.strict = strict
 
     def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
         self.cache._ensure_built()
@@ -142,11 +141,8 @@ class Hdf5ScorerCacheRetriever(pt.Transformer):
             ds = self.cache._get_dataset(query_hash)[:]
             nans = np.isnan(ds)
             if nans.any():
-                if self.strict:
-                    raise RuntimeError(f'retriever only works in strict=True mode if corpus is scored completely; '
-                                       f'{nans.sum()} uncached documents found for query {query!r}.')
-                else:
-                    ds = ds[~nans] # remove nans
+                raise RuntimeError(f'retriever only works if corpus is scored completely; '
+                                   f'{nans.sum()} uncached documents found for query {query!r}.')
             k = min(len(ds), self.num_results)
             docids = ds.argpartition(-k)[-k:]
             scores = ds[docids]

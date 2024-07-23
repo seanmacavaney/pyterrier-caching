@@ -99,23 +99,12 @@ class TestScorerCache(unittest.TestCase):
                 {'qid': 'b', 'query': 'b', 'docno': '2'},
             ]))
 
-            with self.subTest('should raise error when retrieving in strict mode, since not all docs are cached'):
+            with self.subTest('should raise error when retrieving, since not all docs are cached'):
                 with self.assertRaises(RuntimeError):
                     cache.cached_retriever()(pd.DataFrame([
                         {'qid': 'a', 'query': 'a'},
                         {'qid': 'b', 'query': 'b'},
                     ]))
-
-            with self.subTest('should return cached values when not in strict mode'):
-                res = cache.cached_retriever(strict=False)(pd.DataFrame([
-                    {'qid': 'a', 'query': 'a'},
-                    {'qid': 'b', 'query': 'b'},
-                ]))
-                self.assertTrue((res == pd.DataFrame([
-                    {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 2., 'rank': 0},
-                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1},
-                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 2., 'rank': 0},
-                ])).all().all())
 
             # completely score query a
             res = cache(pd.DataFrame([
@@ -126,17 +115,30 @@ class TestScorerCache(unittest.TestCase):
                 {'qid': 'a', 'query': 'a', 'docno': '5'},
             ]))
 
-            with self.subTest('query a should return cached values when in strict mode'):
-                res = cache.cached_retriever(strict=False, num_results=2)(pd.DataFrame([
+            with self.subTest('query a should return cached values'):
+                res = cache.cached_retriever(num_results=2)(pd.DataFrame([
                     {'qid': 'a', 'query': 'a'},
                 ]))
                 self.assertTrue((res == pd.DataFrame([
-                    {'qid': 'a', 'query': 'a', 'docno': '5', 'score': 5., 'rank': 0},
-                    {'qid': 'a', 'query': 'a', 'docno': '4', 'score': 4., 'rank': 1},
+                    {'docno': '5', 'score': 5., 'rank': 0, 'qid': 'a', 'query': 'a'},
+                    {'docno': '4', 'score': 4., 'rank': 1, 'qid': 'a', 'query': 'a'},
                 ])).all().all())
 
-            with self.subTest('query b should still raise an error in strict mode'):
+            with self.subTest('query b should still raise an error'):
                 with self.assertRaises(RuntimeError):
-                    cache.cached_retriever(strict=False, num_results=2)(pd.DataFrame([
+                    cache.cached_retriever(num_results=2)(pd.DataFrame([
                         {'qid': 'b', 'query': 'b'},
+                    ]))
+
+            with self.subTest('should still raise an error when retrieving both'):
+                with self.assertRaises(RuntimeError):
+                    cache.cached_retriever(num_results=2)(pd.DataFrame([
+                        {'qid': 'a', 'query': 'a'},
+                        {'qid': 'b', 'query': 'b'},
+                    ]))
+
+            with self.subTest('should raise for an unseen query'):
+                with self.assertRaises(RuntimeError):
+                    cache.cached_retriever(num_results=2)(pd.DataFrame([
+                        {'qid': 'c', 'query': 'c'},
                     ]))
