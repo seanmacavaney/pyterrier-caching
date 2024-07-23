@@ -88,7 +88,7 @@ class TestScorerCache(unittest.TestCase):
     def test_cached_retriever(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            scorer = pt.apply.score(lambda df: df['docno'].astype(float))
+            scorer = pt.apply.score(lambda df: float(df['docno']))
             cache = pyterrier_caching.ScorerCache(d/'cache', scorer)
             docnos = Lookup.build(['1', '2', '3', '4', '5'], d/'docnos.npids')
             cache.build(docnos_file=d/'docnos.npids')
