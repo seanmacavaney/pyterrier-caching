@@ -83,3 +83,60 @@ class TestScorerCache(unittest.TestCase):
                     {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 1}, # old
                     {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
                 ])).all().all())
+
+
+    def test_cached_retriever(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            scorer = pt.apply.score(lambda df: df['docno'].astype(float))
+            cache = pyterrier_caching.ScorerCache(d/'cache', scorer)
+            docnos = Lookup.build(['1', '2', '3', '4', '5'], d/'docnos.npids')
+            cache.build(docnos_file=d/'docnos.npids')
+            # seeding the cache:
+            res = cache(pd.DataFrame([
+                {'qid': 'a', 'query': 'a', 'docno': '1'},
+                {'qid': 'a', 'query': 'a', 'docno': '2'},
+                {'qid': 'b', 'query': 'b', 'docno': '2'},
+            ]))
+
+            with self.subTest('should raise error when retrieving in strict mode, since not all docs are cached'):
+                with self.assertRaises(RuntimeError):
+                    cache.cached_retriever()(pd.DataFrame([
+                        {'qid': 'a', 'query': 'a'},
+                        {'qid': 'b', 'query': 'b'},
+                    ]))
+
+            with self.subTest('should return cached values when not in strict mode'):
+                res = cache.cached_retriever(strict=False)(pd.DataFrame([
+                    {'qid': 'a', 'query': 'a'},
+                    {'qid': 'b', 'query': 'b'},
+                ]))
+                self.assertTrue((res == pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 2., 'rank': 0},
+                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1},
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 2., 'rank': 0},
+                ])).all().all())
+
+            # completely score query a
+            res = cache(pd.DataFrame([
+                {'qid': 'a', 'query': 'a', 'docno': '1'},
+                {'qid': 'a', 'query': 'a', 'docno': '2'},
+                {'qid': 'a', 'query': 'a', 'docno': '3'},
+                {'qid': 'a', 'query': 'a', 'docno': '4'},
+                {'qid': 'a', 'query': 'a', 'docno': '5'},
+            ]))
+
+            with self.subTest('query a should return cached values when in strict mode'):
+                res = cache.cached_retriever(strict=False, num_results=2)(pd.DataFrame([
+                    {'qid': 'a', 'query': 'a'},
+                ]))
+                self.assertTrue((res == pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '5', 'score': 5., 'rank': 0},
+                    {'qid': 'a', 'query': 'a', 'docno': '4', 'score': 4., 'rank': 1},
+                ])).all().all())
+
+            with self.subTest('query b should still raise an error in strict mode'):
+                with self.assertRaises(RuntimeError):
+                    cache.cached_retriever(strict=False, num_results=2)(pd.DataFrame([
+                        {'qid': 'b', 'query': 'b'},
+                    ]))

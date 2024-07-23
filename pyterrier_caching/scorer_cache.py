@@ -88,8 +88,8 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
     def cached_scorer(self) -> pt.Transformer:
         return Hdf5ScorerCacheScorer(self)
 
-    def cached_retriever(self, num_results: int = 1000) -> pt.Transformer:
-        return Hdf5ScorerCacheRetriever(self, num_results)
+    def cached_retriever(self, num_results: int = 1000, strict: bool = True) -> pt.Transformer:
+        return Hdf5ScorerCacheRetriever(self, num_results, strict)
 
 
 class Hdf5ScorerCacheScorer(pt.Transformer):
@@ -127,9 +127,10 @@ class Hdf5ScorerCacheScorer(pt.Transformer):
 
 
 class Hdf5ScorerCacheRetriever(pt.Transformer):
-    def __init__(self, cache: Hdf5ScorerCache, num_results: int = 1000):
+    def __init__(self, cache: Hdf5ScorerCache, num_results: int = 1000, strict: bool = True):
         self.cache = cache
         self.num_results = num_results
+        self.strict = strict
 
     def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
         self.cache._ensure_built()
@@ -139,19 +140,22 @@ class Hdf5ScorerCacheRetriever(pt.Transformer):
         for i, query in enumerate(inp['query']):
             query_hash = hashlib.sha256(query.encode()).hexdigest()
             ds = self.cache._get_dataset(query_hash)[:]
-            docids = ds.argpartition(-self.num_results)[-self.num_results:]
+            nans = np.isnan(ds)
+            if nans.any():
+                if self.strict:
+                    raise RuntimeError(f'retriever only works in strict=True mode if corpus is scored completely; '
+                                       f'{nans.sum()} uncached documents found for query {query!r}.')
+                else:
+                    ds = ds[~nans] # remove nans
+            k = min(len(ds), self.num_results)
+            docids = ds.argpartition(-k)[-k:]
             scores = ds[docids]
-            if np.isnan(scores).any():
-                raise RuntimeError(f'retriever only works if corpus is scored completely for this query; at least one missing document found for query {query!r}.')
             idxs = scores.argsort()[::-1]
-            docids = docids[idxs]
-            scores = scores[idxs]
-            docnos = self.cache.docnos.fwd[docids]
             builder.extend({
                 '_index': i,
-                'docno': docnos,
-                'score': scores,
-                'rank': np.arange(scores.shape[0])
+                'docno': self.cache.docnos.fwd[docids[idxs]],
+                'score': scores[idxs],
+                'rank': np.arange(scores.shape[0]),
             })
         return builder.to_df(merge_on_index=inp)
 
