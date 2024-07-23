@@ -108,8 +108,6 @@ class TestScorerCache(unittest.TestCase):
 
             # completely score query a
             res = cache(pd.DataFrame([
-                {'qid': 'a', 'query': 'a', 'docno': '1'},
-                {'qid': 'a', 'query': 'a', 'docno': '2'},
                 {'qid': 'a', 'query': 'a', 'docno': '3'},
                 {'qid': 'a', 'query': 'a', 'docno': '4'},
                 {'qid': 'a', 'query': 'a', 'docno': '5'},
@@ -120,8 +118,8 @@ class TestScorerCache(unittest.TestCase):
                     {'qid': 'a', 'query': 'a'},
                 ]))
                 self.assertTrue((res == pd.DataFrame([
-                    {'docno': '5', 'score': 5., 'rank': 0, 'qid': 'a', 'query': 'a'},
-                    {'docno': '4', 'score': 4., 'rank': 1, 'qid': 'a', 'query': 'a'},
+                    {'qid': 'a', 'query': 'a', 'docno': '5', 'score': 5., 'rank': 0},
+                    {'qid': 'a', 'query': 'a', 'docno': '4', 'score': 4., 'rank': 1},
                 ])).all().all())
 
             with self.subTest('num_results is robust'):
@@ -129,11 +127,11 @@ class TestScorerCache(unittest.TestCase):
                     {'qid': 'a', 'query': 'a'},
                 ]))
                 self.assertTrue((res == pd.DataFrame([
-                    {'docno': '5', 'score': 5., 'rank': 0, 'qid': 'a', 'query': 'a'},
-                    {'docno': '4', 'score': 4., 'rank': 1, 'qid': 'a', 'query': 'a'},
-                    {'docno': '3', 'score': 3., 'rank': 2, 'qid': 'a', 'query': 'a'},
-                    {'docno': '2', 'score': 2., 'rank': 3, 'qid': 'a', 'query': 'a'},
-                    {'docno': '1', 'score': 1., 'rank': 4, 'qid': 'a', 'query': 'a'},
+                    {'qid': 'a', 'query': 'a', 'docno': '5', 'score': 5., 'rank': 0},
+                    {'qid': 'a', 'query': 'a', 'docno': '4', 'score': 4., 'rank': 1},
+                    {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 3., 'rank': 2},
+                    {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 2., 'rank': 3},
+                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 4},
                 ])).all().all())
 
             with self.subTest('query b should still raise an error'):
