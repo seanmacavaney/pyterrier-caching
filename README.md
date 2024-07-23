@@ -199,7 +199,16 @@ set as the default. `DbmScorerCache` saves results as a
 
 ## Extras
 
-These components are not caching _per se_, but can be helpful when constructing a
+You load caches from HuggingFace Hub and push caches to HuggingFace Hub using `.from_hf('id')`
+and  `.to_hf('id')`. Example:
+
+```python
+from pyterrier_caching import ScorerCache
+cache = ScorerCache.from_hf('macavaney/msmarco-passage.monot5-base.cache')
+cache.to_hf('username/dataset')
+```
+
+The following components are not caching _per se_, but can be helpful when constructing a
 caching pipeline.
 
 `Lazy(...)` allows you to build a transformer object that is only initialized when
