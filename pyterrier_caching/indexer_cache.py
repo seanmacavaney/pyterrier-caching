@@ -33,7 +33,7 @@ class Lz4PickleIndexerCache(pta.Artifact, pt.Indexer):
     def __len__(self) -> Optional[int]:
         if not self.built():
             raise RuntimeError('cache not built')
-        with  (Path(self.path)/'meta.json').open('rt') as fin:
+        with (Path(self.path)/'pt_meta.json').open('rt') as fin:
             metadata = json.load(fin)
         return metadata['record_count']
 
