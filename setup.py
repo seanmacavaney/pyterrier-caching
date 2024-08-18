@@ -15,6 +15,7 @@ setuptools.setup(
     version=get_version('pyterrier_caching/__init__.py'),
     author='Sean MacAvaney',
     author_email='sean.macavaney@glasgow.ac.uk',
+    url='https://github.com/seanmacavaney/pyterrier-caching',
     description='Caching components for PyTerrier',
     long_description=open('README.md', 'rt').read(),
     long_description_content_type='text/markdown',
