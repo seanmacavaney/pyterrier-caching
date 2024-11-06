@@ -5,8 +5,9 @@ import pandas as pd
 import pyterrier as pt
 import shutil
 import json
+import struct
 from npids import Lookup
-from pyterrier_caching import BuilderMode, artifact_builder, meta_file_compat
+from pyterrier_caching import BuilderMode, artifact_builder, meta_file_compat, dbm_sqlite3
 import pyterrier_alpha as pta
 
 
@@ -156,5 +157,85 @@ class Hdf5ScorerCacheRetriever(pt.Transformer):
         return builder.to_df(merge_on_index=inp)
 
 
-# Default implementation of ScorerCache: Hdf5ScorerCache
-ScorerCache = Hdf5ScorerCache
+class DbmSqlite3ScorerCache(pta.Artifact, pt.Transformer):
+    artifact_type = 'scorer_cache'
+    artifact_format = 'dbm.sqlite3'
+
+    def __init__(self, path, scorer=None, *, group_by=None, key=None, verbose=False):
+        super().__init__(path)
+        meta_file_compat(path)
+        self.scorer = scorer
+        self.verbose = verbose
+        self.meta = None
+        if not (Path(self.path)/'pt_meta.json').exists():
+            if group_by is None:
+                group_by = 'query'
+            if key is None:
+                key = 'docno'
+            with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format) as builder:
+                builder.metadata['group_by'] = group_by
+                builder.metadata['key'] = key
+        with (Path(self.path)/'pt_meta.json').open('rt') as fin:
+            self.meta = json.load(fin)
+        if group_by is not None:
+            assert group_by == self.meta['group_by'], f'group_by={group_by!r} provided, but index created with group_by={self.meta["group_by"]!r}'
+        if key is not None:
+            assert key == self.meta['key'], f'key={key!r} provided, but index created with key={self.meta["key"]!r}'
+        self.group_by = self.meta['group_by']
+        self.key = self.meta['key']
+
+    def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
+        pta.validate.columns(inp, includes=[self.group_by, self.key])
+
+        results = []
+        to_score = []
+        to_score_idxs = {}
+        scores = []
+
+        # First pass: load what we can from caches
+        for group_by_key, group in inp.groupby(self.group_by):
+            group_by_hash = hashlib.sha256(group_by_key.encode('utf8')).hexdigest()
+            cache_path = Path(self.path) / group_by_hash[:2] / f'{group_by_hash}.sqlite3'
+            if not cache_path.parent.exists():
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+            if not cache_path.exists():
+                with dbm_sqlite3.open(cache_path, flag='c'):
+                    pass
+            results.append(group)
+            with dbm_sqlite3.open(cache_path, flag='r') as fin:
+                for row in group.itertuples(index=False):
+                    key = getattr(row, self.key).encode('utf8')
+                    if key in fin:
+                        scores.append(struct.unpack('<d', fin[key])[0])
+                    else:
+                        to_score.append(row)
+                        to_score_idxs[group_by_hash, key] = len(scores)
+                        scores.append(None)
+
+        # Second pass: score the missing ones and add to cache
+        if to_score:
+            to_score = pd.DataFrame(to_score)
+            scored = self.scorer(to_score)
+            for group_by_key, group in scored.groupby(self.group_by):
+                group_by_hash = hashlib.sha256(group_by_key.encode('utf8')).hexdigest()
+                cache_path = Path(self.path) / group_by_hash[:2] / f'{group_by_hash}.sqlite3'
+                with dbm_sqlite3.open(cache_path, flag='w') as fout:
+                    for row in group.itertuples(index=False):
+                        key = getattr(row, self.key).encode('utf8')
+                        scores[to_score_idxs[group_by_hash, key]] = row.score
+                        fout[key] = struct.pack('<d', row.score)
+
+        results = pd.concat(results, ignore_index=True).assign(score=scores)
+        pt.model.add_ranks(results)
+        if self.verbose:
+            print(f"{self}: {len(inp)-len(to_score)} hit(s), {len(to_score)} miss(es)")
+        return results
+
+    def __repr__(self):
+        return f'DbmSqlite3ScorerCache({str(self.path)!r}, {self.scorer!r}, group_by={self.group_by!r}, key={self.key!r})'
+
+
+# Default implementations
+ScorerCache = Hdf5ScorerCache # perhaps we deprecate? Or make DbmSqlite3ScorerCache the default one?
+DenseScorerCache = Hdf5ScorerCache
+SparseScorerCache = DbmSqlite3ScorerCache
