@@ -7,6 +7,7 @@ import shutil
 import json
 import struct
 from npids import Lookup
+from deprecated import deprecated
 from pyterrier_caching import BuilderMode, artifact_builder, meta_file_compat, dbm_sqlite3
 import pyterrier_alpha as pta
 
@@ -62,7 +63,8 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
 
     def _ensure_write_mode(self):
         if self.mode == 'r':
-            assert self.scorer is not None, "missing value in cache; scorer is required"
+            if self.scorer is None:
+                raise LookupError('values missing from cache, but no scorer provided')
             import h5py
             self.mode = 'a'
             self.file.close()
@@ -215,6 +217,8 @@ class DbmSqlite3ScorerCache(pta.Artifact, pt.Transformer):
         # Second pass: score the missing ones and add to cache
         if to_score:
             to_score = pd.DataFrame(to_score)
+            if self.scorer is None:
+                raise LookupError('values missing from cache, but no scorer provided')
             scored = self.scorer(to_score)
             for group_by_key, group in scored.groupby(self.group_by):
                 group_by_hash = hashlib.sha256(group_by_key.encode('utf8')).hexdigest()
@@ -234,8 +238,14 @@ class DbmSqlite3ScorerCache(pta.Artifact, pt.Transformer):
     def __repr__(self):
         return f'DbmSqlite3ScorerCache({str(self.path)!r}, {self.scorer!r}, group_by={self.group_by!r}, key={self.key!r})'
 
+@deprecated(version='0.2.0', reason='ScorerCache will be switched from the dense `Hdf5ScorerCache` implementation to '
+                                    'the sparse `DbmSqlite3ScorerCache` in a future version, which may break '
+                                    'functionality that relies on it being a dense cache. Switch to DenseScorerCache '
+                                    'instead.')
+class DeprecatedHdf5ScorerCache(Hdf5ScorerCache):
+    pass
 
 # Default implementations
-ScorerCache = Hdf5ScorerCache # perhaps we deprecate? Or make DbmSqlite3ScorerCache the default one?
+ScorerCache = DeprecatedHdf5ScorerCache
 DenseScorerCache = Hdf5ScorerCache
 SparseScorerCache = DbmSqlite3ScorerCache
