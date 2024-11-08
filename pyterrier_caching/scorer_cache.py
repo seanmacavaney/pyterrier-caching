@@ -1,3 +1,4 @@
+from typing import Optional
 from pathlib import Path
 import hashlib
 import numpy as np
@@ -7,7 +8,7 @@ import shutil
 import json
 import sqlite3
 from collections import defaultdict
-from contextlib import closing
+from contextlib import closing, contextmanager
 from npids import Lookup
 from deprecated import deprecated
 from pyterrier_caching import BuilderMode, artifact_builder, meta_file_compat
@@ -162,23 +163,48 @@ class Hdf5ScorerCacheRetriever(pt.Transformer):
 
 
 class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
+    """ A cache for storing and retrieving scores for documents, backed by a SQLite3 database. """
+
     artifact_type = 'scorer_cache'
     artifact_format = 'sqlite3'
 
-    def __init__(self, path, scorer=None, *, group_by=None, key=None, verbose=False):
+    def __init__(
+        self,
+        path: str,
+        scorer: pt.Transformer = None,
+        *,
+        group: Optional[str] = None,
+        key: Optional[str] = None,
+        value: Optional[str] = None,
+        verbose: bool = False
+    ):
+        """ Creates a new Sqlite3ScorerCache instance.
+
+        If a cache does not yet exist at the provided ``path``, a new one is created.
+
+        Args:
+            path: The path to the directory where the cache should be stored.
+            scorer: The scorer to use to score documents that are missing from the cache.
+            group: The name of the column in the input DataFrame that contains the group identifier (default: ``query``)
+            key: The name of the column in the input DataFrame that contains the document identifier (default: ``docno``)
+            value: The name of the column in the input DataFrame that contains the value to cache (default: ``score``)
+        """
         super().__init__(path)
         meta_file_compat(path)
         self.scorer = scorer
         self.verbose = verbose
         self.meta = None
         if not (Path(self.path)/'pt_meta.json').exists():
-            if group_by is None:
-                group_by = 'query'
+            if group is None:
+                group = 'query'
             if key is None:
                 key = 'docno'
+            if value is None:
+                value = 'score'
             with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format) as builder:
-                builder.metadata['group_by'] = group_by
+                builder.metadata['group'] = group
                 builder.metadata['key'] = key
+                builder.metadata['value'] = value
                 self.db = sqlite3.connect(builder.path/'db.sqlite3')
                 with closing(self.db.cursor()) as cursor:
                     cursor.execute("""
@@ -193,64 +219,98 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
             self.db = sqlite3.connect(self.path/'db.sqlite3')
         with (Path(self.path)/'pt_meta.json').open('rt') as fin:
             self.meta = json.load(fin)
-        if group_by is not None:
-            assert group_by == self.meta['group_by'], f'group_by={group_by!r} provided, but index created with group_by={self.meta["group_by"]!r}'
+        if group is not None:
+            assert group == self.meta['group'], f'group={group!r} provided, but index created with group={self.meta["group"]!r}'
+        self.group = self.meta['group']
         if key is not None:
             assert key == self.meta['key'], f'key={key!r} provided, but index created with key={self.meta["key"]!r}'
-        self.group_by = self.meta['group_by']
         self.key = self.meta['key']
+        if value is not None:
+            assert value == self.meta['value'], f'value={value!r} provided, but index created with value={self.meta["value"]!r}'
+        self.value = self.meta['value']
 
     def close(self):
-        self.db = None
+        """ Closes this cache, releasing the sqlite connection that it holds. """
+        if self.db is not None:
+            self.db.close()
+            self.db = None
+
+    @contextmanager
+    def _cursor(self):
+        assert self.db is not None, "cache is closed"
+        with closing(self.db.cursor()) as cursor:
+            yield cursor
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
-        assert self.db is not None, "cache is closed"
-        pta.validate.columns(inp, includes=[self.group_by, self.key])
+        """ Scores the input DataFrame using cached values, scoring any missing ones and adding them to the cache. """
+        pta.validate.columns(inp, includes=[self.group, self.key])
 
         to_score_idxs = []
         to_score_map = {}
 
         inp = inp.reset_index(drop=True)
-        scores = pd.Series(index=inp.index, dtype=float)
+        values = pd.Series(index=inp.index, dtype=float)
 
         # First pass: load what we can from cache
-        for group_by_key, group in inp.groupby(self.group_by):
+        for group_key, group in inp.groupby(self.group):
             placeholder = ', '.join(['?'] * len(group))
             key2idxs = defaultdict(list)
             for idx, key in zip(group.index, group[self.key]):
                 key2idxs[key].append(idx)
-            with closing(self.db.cursor()) as cursor:
+            with self._cursor() as cursor:
                 cursor.execute(f'SELECT key, value FROM cache WHERE [group]=? AND key IN ({placeholder})',
-                    [group_by_key] + group[self.key].tolist())
+                    [group_key] + group[self.key].tolist())
                 for key, score in cursor.fetchall():
                     for idx in key2idxs[key]:
-                        scores[idx] = score
+                        values[idx] = score
                     del key2idxs[key]
             for key, idxs in key2idxs.items():
                 to_score_idxs.extend(idxs)
-                to_score_map[group_by_key, key] = idxs
+                to_score_map[group_key, key] = idxs
 
         # Second pass: score the missing ones and add to cache
         if to_score_idxs:
             if self.scorer is None:
                 raise LookupError('values missing from cache, but no scorer provided')
             scored = self.scorer(inp.loc[to_score_idxs])
-            records = scored[[self.group_by, self.key, 'score']]
+            records = scored[[self.group, self.key, self.value]]
             with closing(self.db.cursor()) as cursor:
                 cursor.executemany('INSERT INTO cache ([group], key, value) VALUES (?, ?, ?)', records.itertuples(index=False))
                 self.db.commit()
             for group, key, score in records.itertuples(index=False):
                 for idx in to_score_map[group, key]:
-                    scores[idx] = score
+                    values[idx] = score
 
-        results = inp.assign(score=scores)
-        pt.model.add_ranks(results)
+        results = inp.assign(**{self.value: values})
+        if self.value == 'score':
+            pt.model.add_ranks(results)
         if self.verbose:
             print(f"{self}: {len(inp)-len(to_score_idxs)} hit(s), {len(to_score_idxs)} miss(es)")
         return results
 
+    def merge_from(self, other: 'Sqlite3ScorerCache'):
+        """ Merges the cached values from another Sqlite3ScorerCache instance into this one.
+
+        Any keys that appear in both ``self`` and ``other`` will be replaced with the value from ``other``.
+        """
+        count = 0
+        with self._cursor() as insert_cursor, other._cursor() as select_cursor:
+            select_cursor.execute('SELECT [group], key, value FROM cache')
+            while batch := select_cursor.fetchmany(10_000):
+                count += len(batch)
+                insert_cursor.executemany('INSERT OR REPLACE INTO cache ([group], key, value) VALUES (?, ?, ?)', batch)
+            self.db.commit()
+        if self.verbose:
+            print(f"merged {count} records from {other} into {self}")
+
     def __repr__(self):
-        return f'Sqlite3ScorerCache({str(self.path)!r}, {self.scorer!r}, group_by={self.group_by!r}, key={self.key!r})'
+        return f'Sqlite3ScorerCache({str(self.path)!r}, {self.scorer!r}, group={self.group!r}, key={self.key!r})'
 
 
 @deprecated(version='0.2.0', reason='ScorerCache will be switched from the dense `Hdf5ScorerCache` implementation to '
