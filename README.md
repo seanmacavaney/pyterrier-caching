@@ -70,7 +70,7 @@ of documents by their docno.
 
 ## Caching Results from a Scorer
 
-`ScorerCache` saves the `score` based on `query` and `docno`. When the same
+`SparseScorerCache` saves the `score` based on `query` and `docno`. When the same
 `query`-`docno` combination is encountered again, the value is read from the cache,
 avoiding re-computation.
 
@@ -78,51 +78,34 @@ avoiding re-computation.
 retrieval models, but they bring back many of the same documents, so I don't want to
 re-compute the scores each time.
 
-You use a `ScorerCache` in place of the scorer in a pipeline. It holds a reference to
-the scorer so that it can compute values that are missing from the cache. You need to
-"build" a `ScorerCache` before you can use it, which creates an internal mapping between
-the string `docno` and the integer indexes at which the scores values are stored.
+You use a `SparseScorerCache` in place of the scorer in a pipeline. It holds a reference to
+the scorer so that it can compute values that are missing from the cache.
 
 **⚠️ Important Caveats**:
- - `ScorerCache` saves scores based on **only** the value of the `query` and `docno`. All
+ - `SparseScorerCache` saves scores based on **only** the value of the `query` and `docno`. All
    other information is ignored (e.g., the text of the document). Note that this strategy
    makes it suitable only when each score only depends on the `query` and `docno` of a single
    record (e.g., Mono-style models) and not cases that perform pairwise or listwise scoring
    (e.g, Duo-style models).
- - `ScorerCache` only stores the result of the `score` column. All other outputs of the
-   scorer will be discarded. (Rank is also outputed, but is caculated by `ScorerCache`,
+ - `SparseScorerCache` only stores the result of the `score` column. All other outputs of the
+   scorer will be discarded. (Rank is also outputed, but is caculated by `SparseScorerCache`,
    not the scorer.)
- - Due to limitations of HDF5, only a single process can have the cache open for writing
-   at a time.
- - Scores are saved as `float32` values. Other values will attempted to be cast up/down
-   to float32.
- - The value of `nan` is reserved as an indicator that the value is missing from the cache.
-   Scorers should not return this value.
- - A `ScorerCache` represents the cross between a scorer and a corpus. Do not try to use a
+ - Scores are saved as `float64` values. Other values will attempted to be cast up/down
+   to float64.
+ - A `SparseScorerCache` represents the cross between a scorer and a corpus. Do not try to use a
    single cache across multiple scorers or corpora -- you'll get unexpected/invalid results.
 
 Example:
 
 ```python
 import pyterrier as pt
-pt.init()
-from pyterrier_caching import ScorerCache
+from pyterrier_caching import SparseScorerCache
 
 # Setup
-cached_scorer = ScorerCache('path/to/cache', MyExpensiveScorer())
+cached_scorer = SparseScorerCache('path/to/cache', MyExpensiveScorer())
 dataset = pt.get_dataset('some-dataset') # e.g., 'irds:msmarco-passage'
 
-# You need to build your cache before you can use it. There are several
-# ways to do this:
-if not cached_scorer.built():
-    # Easiest:
-    cached_scorer.build(dataset.get_corpus_iter())
-    # If you already have an "npids" file to map the docnos to indexes, you can use:
-    # >>> cached_scorer.build(docnos_file='path/to/docnos.npids')
-    # This will be faster than iterating over the entire corpus, especially for
-    # large datasets.
-
-# Use the ScorerCache cache object just as you would a scorer
+# Use the SparseScorerCache cache object just as you would a scorer
 cached_pipeline = MyFirstStage() >> cached_scorer
 
 cached_pipeline(dataset.get_topics())
@@ -140,8 +123,40 @@ Concrete Examples:
 <details>
 <summary>👁‍ More Details</summary>
 
-`ScorerCache` currently has one implementation, `Hdf5ScorerCache`, which is
-set as the default. `Hdf5ScorerCache` saves scores in an HDF5 file.
+`SparseScorerCache` is suitable only when a relatively small proportion of a corpus is cached.
+If the proportion grows larger, consider using `DenseScorerCache` instead, which stores results
+using HDF5. When using a `DenseScorerCache`, you need an initial "build" step, which constructs
+a mapping of the docnos to their index in the lookup vector:
+
+```python
+import pyterrier as pt
+from pyterrier_caching import SparseScorerCache
+
+# Setup
+cached_scorer = DenseScorerCache('path/to/cache', MyExpensiveScorer())
+dataset = pt.get_dataset('some-dataset') # e.g., 'irds:msmarco-passage'
+
+# You need to build your cache before you can use it. There are several
+# ways to do this:
+if not cached_scorer.built():
+    # Easiest:
+    cached_scorer.build(dataset.get_corpus_iter())
+    # If you already have an "npids" file to map the docnos to indexes, you can use:
+    # >>> cached_scorer.build(docnos_file='path/to/docnos.npids')
+    # This will be faster than iterating over the entire corpus, especially for
+    # large datasets.
+
+# Use the DenseScorerCache cache object just as you would a scorer
+cached_pipeline = MyFirstStage() >> cached_scorer
+
+cached_pipeline(dataset.get_topics())
+# Will be faster when you run it a second time, since all values are cached
+cached_pipeline(dataset.get_topics())
+
+# Will only compute scores for docnos that were not returned by MyFirstStage()
+another_cached_pipeline = AnotherFirstStage() >> cached_scorer
+another_cached_pipeline(dataset.get_topics())
+```
 
 </details>
 

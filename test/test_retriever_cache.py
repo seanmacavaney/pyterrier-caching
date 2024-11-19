@@ -5,13 +5,8 @@ import unittest
 from pathlib import Path
 import pyterrier as pt
 import pyterrier_caching
-from npids import Lookup
 
 class TestRetrieverCache(unittest.TestCase):
-    def setUp(self):
-        if not pt.started():
-            pt.init()
-
     def test_basic(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)

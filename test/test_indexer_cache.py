@@ -1,14 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
-import pyterrier as pt
 import pyterrier_caching
 
 class TestIndexerCache(unittest.TestCase):
-    def setUp(self):
-        if not pt.started():
-            pt.init()
-
     def test_basic(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)

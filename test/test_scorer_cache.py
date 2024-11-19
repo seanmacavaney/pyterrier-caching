@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,15 +6,16 @@ import pyterrier as pt
 import pyterrier_caching
 from npids import Lookup
 
-class TestScorerCache(unittest.TestCase):
-    def setUp(self):
-        if not pt.started():
-            pt.init()
 
+def raises(df):
+    raise RuntimeError()
+
+
+class TestDenseScorerCache(unittest.TestCase):
     def test_build_from_iter(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            cache = pyterrier_caching.ScorerCache(d/'cache')
+            cache = pyterrier_caching.DenseScorerCache(d/'cache')
             cache.build([
                 {'docno': '1', 'data': 'test'},
                 {'docno': '2', 'data': 'caching pyterrier'},
@@ -28,7 +28,7 @@ class TestScorerCache(unittest.TestCase):
     def test_build_from_docnos(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            cache = pyterrier_caching.ScorerCache(d/'cache')
+            cache = pyterrier_caching.DenseScorerCache(d/'cache')
             docnos = Lookup.build(['1', '2', '3', '4', '5'], d/'docnos.npids')
             cache.build(docnos_file=d/'docnos.npids')
             self.assertEqual(cache.corpus_count(), 5)
@@ -37,9 +37,9 @@ class TestScorerCache(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             scorer_1 = pt.apply.score(lambda df: 1.)
-            scorer_raises = pt.apply.score(lambda df: 0/0)
+            scorer_raises = pt.apply.score(raises)
             scorer_2 = pt.apply.score(lambda df: 2.)
-            cache = pyterrier_caching.ScorerCache(d/'cache', scorer_1)
+            cache = pyterrier_caching.DenseScorerCache(d/'cache', scorer_1)
             docnos = Lookup.build(['1', '2', '3', '4', '5'], d/'docnos.npids')
             cache.build(docnos_file=d/'docnos.npids')
             # seeding the cache:
@@ -84,12 +84,55 @@ class TestScorerCache(unittest.TestCase):
                     {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
                 ])).all().all())
 
+            with self.subTest('reload the cache and make sure we get the same results'):
+                cache = pyterrier_caching.DenseScorerCache(d/'cache', scorer_2)
+                res = cache(pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1'},
+                    {'qid': 'a', 'query': 'a', 'docno': '3'},
+                    {'qid': 'b', 'query': 'b', 'docno': '2'},
+                    {'qid': 'b', 'query': 'a', 'docno': '1'}, # should pull from (a,1) cache (not dependent on qid)
+                    {'qid': 'c', 'query': 'c', 'docno': '1'},
+                ]))
+                self.assertTrue((res == pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 2., 'rank': 0}, # new
+                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0}, # old
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
+                ])).all().all())
+
+            with self.subTest('no scorer necessary if everything is already in the cache'):
+                cache = pyterrier_caching.DenseScorerCache(d/'cache')
+                res = cache(pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1'},
+                    {'qid': 'a', 'query': 'a', 'docno': '3'},
+                    {'qid': 'b', 'query': 'b', 'docno': '2'},
+                    {'qid': 'b', 'query': 'a', 'docno': '1'}, # should pull from (a,1) cache (not dependent on qid)
+                    {'qid': 'c', 'query': 'c', 'docno': '1'},
+                ]))
+                self.assertTrue((res == pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 2., 'rank': 0}, # new
+                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0}, # old
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
+                ])).all().all())
+
+            with self.subTest('raises error if document is requested that wasn\'t in the cache and no scorer is provided'):
+                with self.assertRaises(LookupError):
+                    cache(pd.DataFrame([
+                        {'qid': 'a', 'query': 'a', 'docno': '4'},
+                        {'qid': 'a', 'query': 'a', 'docno': '3'},
+                        {'qid': 'b', 'query': 'b', 'docno': '2'},
+                        {'qid': 'b', 'query': 'a', 'docno': '1'},
+                        {'qid': 'c', 'query': 'c', 'docno': '1'},
+                    ]))
 
     def test_cached_retriever(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             scorer = pt.apply.score(lambda df: float(df['docno']))
-            cache = pyterrier_caching.ScorerCache(d/'cache', scorer)
+            cache = pyterrier_caching.DenseScorerCache(d/'cache', scorer)
             docnos = Lookup.build(['1', '2', '3', '4', '5'], d/'docnos.npids')
             cache.build(docnos_file=d/'docnos.npids')
             # seeding the cache:
@@ -151,4 +194,100 @@ class TestScorerCache(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     cache.cached_retriever(num_results=2)(pd.DataFrame([
                         {'qid': 'c', 'query': 'c'},
+                    ]))
+
+
+class TestSparseScorerCache(unittest.TestCase):
+    def test_basic(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            scorer_1 = pt.apply.score(lambda df: 1.)
+            scorer_raises = pt.apply.score(raises)
+            scorer_2 = pt.apply.score(lambda df: 2.)
+            cache = pyterrier_caching.SparseScorerCache(d/'cache', scorer_1)
+            # seeding the cache:
+            res = cache(pd.DataFrame([
+                {'qid': 'a', 'query': 'a', 'docno': '1'},
+                {'qid': 'a', 'query': 'a', 'docno': '2'},
+                {'qid': 'b', 'query': 'b', 'docno': '2'},
+            ]))
+            pd.testing.assert_frame_equal(res, pd.DataFrame([
+                {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0},
+                {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 1., 'rank': 1},
+                {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0},
+            ]))
+
+            with self.subTest('make sure it doesn\'t call the scorer again on any of these'):
+                cache.scorer = scorer_raises
+                res = cache(pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1'},
+                    {'qid': 'a', 'query': 'a', 'docno': '2'},
+                    {'qid': 'b', 'query': 'b', 'docno': '2'},
+                ]))
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0},
+                    {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 1., 'rank': 1},
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0},
+                ]))
+
+            with self.subTest('make sure it calls a new scorer on any unknown values'):
+                cache.scorer = scorer_2
+                res = cache(pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1'},
+                    {'qid': 'a', 'query': 'a', 'docno': '3'},
+                    {'qid': 'b', 'query': 'b', 'docno': '2'},
+                    {'qid': 'b', 'query': 'a', 'docno': '1'}, # should pull from (a,1) cache (not dependent on qid)
+                    {'qid': 'c', 'query': 'c', 'docno': '1'},
+                ]))
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 2., 'rank': 0}, # new
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0}, # old
+                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
+                ]))
+
+            cache = None
+            with self.subTest('reload the cache and make sure we get the same results'):
+                cache = pyterrier_caching.SparseScorerCache(d/'cache', scorer_2)
+                res = cache(pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1'},
+                    {'qid': 'a', 'query': 'a', 'docno': '3'},
+                    {'qid': 'b', 'query': 'b', 'docno': '2'},
+                    {'qid': 'b', 'query': 'a', 'docno': '1'}, # should pull from (a,1) cache (not dependent on qid)
+                    {'qid': 'c', 'query': 'c', 'docno': '1'},
+                ]))
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 2., 'rank': 0}, # new
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0}, # old
+                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
+                ]))
+
+            with self.subTest('no scorer necessary if everything is already in the cache'):
+                cache = pyterrier_caching.SparseScorerCache(d/'cache')
+                res = cache(pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1'},
+                    {'qid': 'a', 'query': 'a', 'docno': '3'},
+                    {'qid': 'b', 'query': 'b', 'docno': '2'},
+                    {'qid': 'b', 'query': 'a', 'docno': '1'}, # should pull from (a,1) cache (not dependent on qid)
+                    {'qid': 'c', 'query': 'c', 'docno': '1'},
+                ]))
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
+                    {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 2., 'rank': 0}, # new
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0}, # old
+                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
+                ]))
+
+            with self.subTest('raises error if document is requested that wasn\'t in the cache and no scorer is provided'):
+                with self.assertRaises(LookupError):
+                    cache(pd.DataFrame([
+                        {'qid': 'a', 'query': 'a', 'docno': '4'},
+                        {'qid': 'a', 'query': 'a', 'docno': '3'},
+                        {'qid': 'b', 'query': 'b', 'docno': '2'},
+                        {'qid': 'b', 'query': 'a', 'docno': '1'},
+                        {'qid': 'c', 'query': 'c', 'docno': '1'},
                     ]))
