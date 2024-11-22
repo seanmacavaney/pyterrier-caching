@@ -1,9 +1,10 @@
-from typing import Optional, List, Iterator, Dict, Any, Union
+from typing import Optional, List, Iterator, Dict, Any, Union, Literal
 from pathlib import Path
 from contextlib import ExitStack
 import pickle
 import json
 import lz4.frame
+from tempfile import TemporaryDirectory
 import numpy as np
 import pandas as pd
 import pyterrier as pt
@@ -17,9 +18,15 @@ class Lz4PickleIndexerCache(pta.Artifact, pt.Indexer):
     artifact_type = 'indexer_cache'
     artifact_format = 'lz4pickle'
 
-    def __init__(self, path: str):
+    def __init__(self, path: Optional[str] = None):
+        if path is None:
+            self._tmpdir = TemporaryDirectory()
+            path = Path(self._tmpdir.name) / 'cache'
+        else:
+            self._tmpdir = None
         super().__init__(path)
         meta_file_compat(path)
+        self._docnos = None
 
     def indexer(self, mode: Union[str, BuilderMode] = BuilderMode.create, skip_docno_lookup: bool = False) -> pt.Indexer:
         return Lz4PickleIndexerCacheIndexer(self, mode, skip_docno_lookup=skip_docno_lookup)
@@ -83,6 +90,34 @@ class Lz4PickleIndexerCache(pta.Artifact, pt.Indexer):
     def built(self) -> bool:
         return (Path(self.path)/'pt_meta.json').exists()
 
+    def text_loader(
+        self,
+        fields: Union[str, List[str], Literal['*']] = '*',
+        *,
+        verbose: bool = False,
+    ) -> pt.Transformer:
+        return Lz4PickleIndexerCacheTextLoader(self, fields, verbose=verbose)
+
+    def docnos(self):
+        assert self.built()
+        if self._docnos is None:
+            self._docnos = Lookup(Path(self.path)/'docnos.npids')
+        return self._docnos
+
+    def close(self):
+        if self._docnos is not None:
+            self._docnos.close()
+            self._docnos = None
+        if self._tmpdir is not None:
+            self._tmpdir.cleanup()
+            self._tmpdir = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
 
 class Lz4PickleIndexerCacheIndexer(pt.Indexer):
     def __init__(self, cache: Lz4PickleIndexerCache, mode: Union[str, BuilderMode], skip_docno_lookup: bool = False):
@@ -109,6 +144,53 @@ class Lz4PickleIndexerCacheIndexer(pt.Indexer):
                 fdata.write(lz4.frame.compress(record_bytes))
                 foffsets.write(np.array(fdata.tell(), dtype=np.uint64))
                 builder.metadata['record_count'] += 1
+
+
+class Lz4PickleIndexerCacheTextLoader(pt.Transformer):
+    def __init__(self,
+        cache: Lz4PickleIndexerCache,
+        fields: Union[str, List[str], Literal['*']] = '*',
+        *,
+        verbose: bool = False,
+    ):
+        self.cache = cache
+        self.fields = fields
+        self.verbose = verbose
+
+    def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
+        pta.validate.columns(inp, includes=['docno'])
+        if len(inp) == 0:
+            return inp
+
+        if self.fields == '*':
+            fields = None
+        elif isinstance(self.fields, str):
+            fields = [self.fields]
+        else:
+            fields = self.fields
+
+        doc_ids = self.cache.docnos().inv[inp['docno'].to_list()]
+
+        builder = None
+        with open(Path(self.cache.path)/'data.pkl.lz4', mode='rb') as fdata, \
+             closing_memmap(Path(self.cache.path)/'offsets.np', dtype=np.uint64) as offsets_mmp:
+            if self.verbose:
+                doc_ids = tqdm(doc_ids, total=len(doc_ids), unit='d')
+            for did in doc_ids:
+                offset_start, offset_stop = offsets_mmp[did:did+2]
+                record_length = offset_stop - offset_start
+                fdata.seek(offset_start)
+                record = fdata.read(record_length)
+                record = lz4.frame.decompress(record)
+                record = pickle.loads(record)
+                if fields is not None:
+                    record = {k: v for k, v in record.items() if k in fields}
+                record.pop('docno')
+                if builder is None:
+                    builder = pta.DataFrameBuilder(list(record.keys()))
+                builder.extend(record)
+
+        return builder.to_df(inp)
 
 
 # Default implementation of IndexerCache: Lz4PickleIndexerCache
