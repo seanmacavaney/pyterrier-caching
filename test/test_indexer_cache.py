@@ -49,17 +49,17 @@ class TestIndexerCache(unittest.TestCase):
                 self.assertEqual(list(cache.get_corpus_iter(start=3, stop=1)), [])
             with self.subTest('text_loader'):
                 loader = cache.text_loader()
-                self.assertEqual(loader([{'docno': '1'}]), [
+                pd.testing.assert_frame_equal(loader(pd.DataFrame([{'docno': '1'}])), pd.DataFrame([
                     {'docno': '1', 'data': 'test'},
-                ])
-                self.assertEqual(loader([{'docno': '2'}]), [
+                ]))
+                pd.testing.assert_frame_equal(loader(pd.DataFrame([{'docno': '2'}])), pd.DataFrame([
                     {'docno': '2', 'data': 'caching pyterrier'},
-                ])
-                self.assertEqual(loader([{'docno': '2'}, {'docno': '5'}, {'docno': '2'}]), [
+                ]))
+                pd.testing.assert_frame_equal(loader(pd.DataFrame([{'docno': '2'}, {'docno': '5'}, {'docno': '2'}])), pd.DataFrame([
                     {'docno': '2', 'data': 'caching pyterrier'},
                     {'docno': '5', 'data': 'foo bar baz'},
                     {'docno': '2', 'data': 'caching pyterrier'},
-                ])
+                ]))
                 self.assertEqual(len(loader(pd.DataFrame([], columns=['docno']))), 0)
 
     def test_temp(self):
@@ -104,17 +104,17 @@ class TestIndexerCache(unittest.TestCase):
                 self.assertEqual(list(cache.get_corpus_iter(start=3, stop=1)), [])
             with self.subTest('text_loader'):
                 loader = cache.text_loader()
-                self.assertEqual(loader([{'docno': '1'}]), [
+                pd.testing.assert_frame_equal(loader(pd.DataFrame([{'docno': '1'}])), pd.DataFrame([
                     {'docno': '1', 'data': 'test'},
-                ])
-                self.assertEqual(loader([{'docno': '2'}]), [
+                ]))
+                pd.testing.assert_frame_equal(loader(pd.DataFrame([{'docno': '2'}])), pd.DataFrame([
                     {'docno': '2', 'data': 'caching pyterrier'},
-                ])
-                self.assertEqual(loader([{'docno': '2'}, {'docno': '5'}, {'docno': '2'}]), [
+                ]))
+                pd.testing.assert_frame_equal(loader(pd.DataFrame([{'docno': '2'}, {'docno': '5'}, {'docno': '2'}])), pd.DataFrame([
                     {'docno': '2', 'data': 'caching pyterrier'},
                     {'docno': '5', 'data': 'foo bar baz'},
                     {'docno': '2', 'data': 'caching pyterrier'},
-                ])
+                ]))
                 self.assertEqual(len(loader(pd.DataFrame([], columns=['docno']))), 0)
         self.assertFalse(cache.built())
 
