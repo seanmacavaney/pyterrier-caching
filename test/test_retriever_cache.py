@@ -32,11 +32,11 @@ class TestRetrieverCache(unittest.TestCase):
                 {'qid': 'a', 'query': 'a'},
                 {'qid': 'b', 'query': 'b'},
             ]))
-            self.assertTrue((res == pd.DataFrame([
+            pd.testing.assert_frame_equal(res, pd.DataFrame([
                 {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 2., 'rank': 0},
                 {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 1., 'rank': 1},
                 {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 3., 'rank': 0},
-            ])).all().all())
+            ]))
 
             with self.subTest('make sure it doesn\'t call the retriever again on any of these'):
                 cache.retriever = retriever_raises
@@ -44,20 +44,20 @@ class TestRetrieverCache(unittest.TestCase):
                     {'qid': 'a', 'query': 'a'},
                     {'qid': 'b', 'query': 'b'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 2., 'rank': 0},
                     {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 1., 'rank': 1},
                     {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 3., 'rank': 0},
-                ])).all().all())
+                ]))
 
             with self.subTest('only some of the queries'):
                 cache.retriever = retriever_raises
                 res = cache(pd.DataFrame([
                     {'qid': 'b', 'query': 'b'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 3., 'rank': 0},
-                ])).all().all())
+                ]))
 
             with self.subTest('make sure it calls a new scorer on any unknown values'):
                 cache.retriever = pt.apply.generic(retriever_2)
@@ -65,8 +65,8 @@ class TestRetrieverCache(unittest.TestCase):
                     {'qid': 'a', 'query': 'a'},
                     {'qid': 'c', 'query': 'c'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 2., 'rank': 0}, # old
                     {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 1., 'rank': 1}, # old
                     {'qid': 'c', 'query': 'c', 'docno': '0', 'score': 0., 'rank': 0}, # new
-                ])).all().all())
+                ]))
