@@ -1,1 +1,5 @@
+pytest
 pytest-subtests
+pytest-cov
+pytest-json-report
+ruff

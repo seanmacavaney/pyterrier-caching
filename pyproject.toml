@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyterrier-caching"
+description = "Caching components for PyTerrier"
+requires-python = ">=3.8"
+authors = [
+  {name = "Sean MacAvaney", email = "sean.macavaney@glasgow.ac.uk"},
+]
+maintainers = [
+  {name = "Sean MacAvaney", email = "sean.macavaney@glasgow.ac.uk"},
+]
+readme = "README.rst"
+classifiers = [
+  "Programming Language :: Python",
+  "Operating System :: OS Independent",
+  "Topic :: Text Processing",
+  "Topic :: Text Processing :: Indexing",
+  "License :: OSI Approved :: MIT License",
+]
+dynamic = ["version", "dependencies"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyterrier_caching.__version__"}
+dependencies = {file = ["requirements.txt"]}
+
+[project.optional-dependencies]
+bgem3 = [
+  "FlagEmbedding",
+]
+
+[tool.setuptools.packages.find]
+exclude = ["tests"]
+
+[project.urls]
+Repository = "https://github.com/seanmacavaney/pyterrier-caching"
+"Bug Tracker" = "https://github.com/seanmacavaney/pyterrier-caching/issues"
+
+[project.entry-points."pyterrier.artifact"]
+"indexer_cache.lz4pickle" = "pyterrier_caching:Lz4PickleIndexerCache"
+"retriever_cache.dbm.dumb" = "pyterrier_caching:DbmRetrieverCache"
+"scorer_cache.hdf5" = "pyterrier_caching:Hdf5ScorerCache"
+"scorer_cache.sqlite3" = "pyterrier_caching:Sqlite3ScorerCache"
