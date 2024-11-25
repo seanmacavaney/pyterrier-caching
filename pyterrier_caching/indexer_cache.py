@@ -11,12 +11,12 @@ import pyterrier as pt
 from npids import Lookup
 from tqdm import tqdm
 import pyterrier_alpha as pta
-from pyterrier_caching import BuilderMode, closing_memmap, artifact_builder, meta_file_compat
+from pyterrier_caching import closing_memmap, meta_file_compat
 
 
 class Lz4PickleIndexerCache(pta.Artifact, pt.Indexer):
-    artifact_type = 'indexer_cache'
-    artifact_format = 'lz4pickle'
+    ARTIFACT_TYPE = 'indexer_cache'
+    ARTIFACT_FORMAT = 'lz4pickle'
 
     def __init__(self, path: Optional[str] = None):
         if path is None:
@@ -28,7 +28,7 @@ class Lz4PickleIndexerCache(pta.Artifact, pt.Indexer):
         meta_file_compat(path)
         self._docnos = None
 
-    def indexer(self, mode: Union[str, BuilderMode] = BuilderMode.create, skip_docno_lookup: bool = False) -> pt.Indexer:
+    def indexer(self, mode: Union[str, pta.ArtifactBuilderMode] = pta.ArtifactBuilderMode.create, skip_docno_lookup: bool = False) -> pt.Indexer:
         return Lz4PickleIndexerCacheIndexer(self, mode, skip_docno_lookup=skip_docno_lookup)
 
     def index(self, it: Iterator[Dict[str, Any]]) -> None:
@@ -120,15 +120,15 @@ class Lz4PickleIndexerCache(pta.Artifact, pt.Indexer):
 
 
 class Lz4PickleIndexerCacheIndexer(pt.Indexer):
-    def __init__(self, cache: Lz4PickleIndexerCache, mode: Union[str, BuilderMode], skip_docno_lookup: bool = False):
+    def __init__(self, cache: Lz4PickleIndexerCache, mode: Union[str, pta.ArtifactBuilderMode], skip_docno_lookup: bool = False):
         self.cache = cache
         self.mode = mode
         self.skip_docno_lookup = skip_docno_lookup
 
     def index(self, it: Iterator[Dict[str, Any]]) -> None:
-        assert BuilderMode(self.mode) == BuilderMode.create, "Lz4PickleIndexerCache only supports 'create' mode"
+        assert pta.ArtifactBuilderMode(self.mode) == pta.ArtifactBuilderMode.create, "Lz4PickleIndexerCache only supports 'create' mode"
         with ExitStack() as s:
-            builder = s.enter_context(artifact_builder(self.cache.path, self.mode, self.cache.artifact_type, self.cache.artifact_format))
+            builder = s.enter_context(pta.ArtifactBuilder(self.cache, mode=self.mode))
             fdata = s.enter_context(open(builder.path/'data.pkl.lz4', mode='wb'))
             foffsets = s.enter_context(open(builder.path/'offsets.np', 'wb'))
             docno_lookup = False if self.skip_docno_lookup else None

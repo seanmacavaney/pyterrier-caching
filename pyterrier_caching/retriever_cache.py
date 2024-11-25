@@ -8,12 +8,12 @@ import pickle
 import json
 import dbm.dumb
 import pyterrier_alpha as pta
-from pyterrier_caching import BuilderMode, artifact_builder, meta_file_compat
+from pyterrier_caching import meta_file_compat
 
 
 class DbmRetrieverCache(pta.Artifact, pt.Transformer):
-    artifact_type = 'retriever_cache'
-    artifact_format = 'dbm.dumb'
+    ARTIFACT_TYPE = 'retriever_cache'
+    ARTIFACT_FORMAT = 'dbm.dumb'
 
     def __init__(self,
                  path: Union[str, Path],
@@ -29,7 +29,7 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
         self.file = None
         self.file_name = None
         if not (Path(self.path)/'pt_meta.json').exists():
-            with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format):
+            with pta.ArtifactBuilder(self):
                 pass # just create the artifact
 
     def transform(self, inp):
@@ -86,8 +86,8 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
         if self.meta is None:
             with (self.path/'pt_meta.json').open('rt') as fin:
                 self.meta = json.load(fin)
-        assert self.meta['type'] == self.artifact_type
-        assert self.meta['format'] == self.artifact_format
+        assert self.meta['type'] == self.ARTIFACT_TYPE
+        assert self.meta['format'] == self.ARTIFACT_FORMAT
 
     def __repr__(self):
         return f'DbmRetrieverCache({repr(str(self.path))}, {self.retriever})'
