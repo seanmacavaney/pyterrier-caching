@@ -29,7 +29,7 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
         self.file = None
         self.file_name = None
         if not (Path(self.path)/'pt_meta.json').exists():
-            with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format) as builder:
+            with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format):
                 pass # just create the artifact
 
     def transform(self, inp):
@@ -45,7 +45,6 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
         on = tuple(sorted(on))
 
         self._ensure_built(on)
-        any_updates = False
         results = []
         to_retrieve = []
         for i in range(len(inp)):
