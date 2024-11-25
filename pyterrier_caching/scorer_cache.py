@@ -23,7 +23,6 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
     def __init__(self, path, scorer=None, verbose=False):
         super().__init__(path)
         meta_file_compat(path)
-        self.mode = 'r'
         self.scorer = scorer
         self.verbose = verbose
         self.meta = None
@@ -58,7 +57,7 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
         import h5py
         assert self.built(), "you must .build(...) this cache before it can be used"
         if self.file is None:
-            self.file = h5py.File(self.path/'data.h5', self.mode)
+            self.file = h5py.File(self.path/'data.h5', 'r')
         if self.meta is None:
             with (self.path/'pt_meta.json').open('rt') as fin:
                 self.meta = json.load(fin)
@@ -89,7 +88,6 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
         """ Closes this cache, releasing the file pointer that it holds and writing any new results to disk. """
         if self.file is not None:
             self.dataset_cache = {} # reset the dataset cache
-            self.mode = 'r' # subsequent opens will be read only unless needed
             self.file.close()
             self.file = None
         if self.meta is not None:
