@@ -48,11 +48,11 @@ class TestDenseScorerCache(unittest.TestCase):
                 {'qid': 'a', 'query': 'a', 'docno': '2'},
                 {'qid': 'b', 'query': 'b', 'docno': '2'},
             ]))
-            self.assertTrue((res == pd.DataFrame([
+            pd.testing.assert_frame_equal(res, pd.DataFrame([
                 {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0},
                 {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 1., 'rank': 1},
                 {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0},
-            ])).all().all())
+            ]))
 
             with self.subTest('make sure it doesn\'t call the scorer again on any of these'):
                 cache.scorer = scorer_raises
@@ -61,11 +61,11 @@ class TestDenseScorerCache(unittest.TestCase):
                     {'qid': 'a', 'query': 'a', 'docno': '2'},
                     {'qid': 'b', 'query': 'b', 'docno': '2'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0},
                     {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 1., 'rank': 1},
                     {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0},
-                ])).all().all())
+                ]))
 
             with self.subTest('make sure it calls a new scorer on any unknown values'):
                 cache.scorer = scorer_2
@@ -76,13 +76,13 @@ class TestDenseScorerCache(unittest.TestCase):
                     {'qid': 'b', 'query': 'a', 'docno': '1'}, # should pull from (a,1) cache (not dependent on qid)
                     {'qid': 'c', 'query': 'c', 'docno': '1'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
                     {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 2., 'rank': 0}, # new
-                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0}, # old
-                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0}, # old
+                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
                     {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
-                ])).all().all())
+                ]))
 
             with self.subTest('reload the cache and make sure we get the same results'):
                 cache = pyterrier_caching.DenseScorerCache(d/'cache', scorer_2)
@@ -93,13 +93,13 @@ class TestDenseScorerCache(unittest.TestCase):
                     {'qid': 'b', 'query': 'a', 'docno': '1'}, # should pull from (a,1) cache (not dependent on qid)
                     {'qid': 'c', 'query': 'c', 'docno': '1'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
                     {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 2., 'rank': 0}, # new
-                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0}, # old
-                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0}, # old
+                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
                     {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
-                ])).all().all())
+                ]))
 
             with self.subTest('no scorer necessary if everything is already in the cache'):
                 cache = pyterrier_caching.DenseScorerCache(d/'cache')
@@ -110,13 +110,13 @@ class TestDenseScorerCache(unittest.TestCase):
                     {'qid': 'b', 'query': 'a', 'docno': '1'}, # should pull from (a,1) cache (not dependent on qid)
                     {'qid': 'c', 'query': 'c', 'docno': '1'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
                     {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 2., 'rank': 0}, # new
-                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 0}, # old
-                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 1}, # old
+                    {'qid': 'b', 'query': 'b', 'docno': '2', 'score': 1., 'rank': 0}, # old
+                    {'qid': 'b', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 1}, # old
                     {'qid': 'c', 'query': 'c', 'docno': '1', 'score': 2., 'rank': 0}, # new
-                ])).all().all())
+                ]))
 
             with self.subTest('raises error if document is requested that wasn\'t in the cache and no scorer is provided'):
                 with self.assertRaises(LookupError):
@@ -160,22 +160,22 @@ class TestDenseScorerCache(unittest.TestCase):
                 res = cache.cached_retriever(num_results=2)(pd.DataFrame([
                     {'qid': 'a', 'query': 'a'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'a', 'query': 'a', 'docno': '5', 'score': 5., 'rank': 0},
                     {'qid': 'a', 'query': 'a', 'docno': '4', 'score': 4., 'rank': 1},
-                ])).all().all())
+                ]))
 
             with self.subTest('num_results is robust'):
                 res = cache.cached_retriever(num_results=1000)(pd.DataFrame([
                     {'qid': 'a', 'query': 'a'},
                 ]))
-                self.assertTrue((res == pd.DataFrame([
+                pd.testing.assert_frame_equal(res, pd.DataFrame([
                     {'qid': 'a', 'query': 'a', 'docno': '5', 'score': 5., 'rank': 0},
                     {'qid': 'a', 'query': 'a', 'docno': '4', 'score': 4., 'rank': 1},
                     {'qid': 'a', 'query': 'a', 'docno': '3', 'score': 3., 'rank': 2},
                     {'qid': 'a', 'query': 'a', 'docno': '2', 'score': 2., 'rank': 3},
                     {'qid': 'a', 'query': 'a', 'docno': '1', 'score': 1., 'rank': 4},
-                ])).all().all())
+                ]))
 
             with self.subTest('query b should still raise an error'):
                 with self.assertRaises(RuntimeError):
