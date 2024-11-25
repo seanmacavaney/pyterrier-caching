@@ -12,13 +12,13 @@ from contextlib import closing, contextmanager
 from more_itertools import chunked
 from npids import Lookup
 from deprecated import deprecated
-from pyterrier_caching import BuilderMode, artifact_builder, meta_file_compat
+from pyterrier_caching import meta_file_compat
 import pyterrier_alpha as pta
 
 
 class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
-    artifact_type = 'scorer_cache'
-    artifact_format = 'hdf5'
+    ARTIFACT_TYPE = 'scorer_cache'
+    ARTIFACT_FORMAT = 'hdf5'
 
     def __init__(self, path, scorer=None, verbose=False):
         super().__init__(path)
@@ -40,7 +40,7 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
         assert not self.built(), "this cache is alrady built"
         assert corpus_iter is not None or docnos_file is not None
         import h5py
-        with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format) as builder:
+        with pta.ArtifactBuilder(self) as builder:
             with h5py.File(str(builder.path/'data.h5'), 'a'):
                 pass # just create the data file
             if docnos_file:
@@ -234,8 +234,8 @@ class Hdf5ScorerCacheRetriever(pt.Transformer):
 class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
     """ A cache for storing and retrieving scores for documents, backed by a SQLite3 database. """
 
-    artifact_type = 'scorer_cache'
-    artifact_format = 'sqlite3'
+    ARTIFACT_TYPE = 'scorer_cache'
+    ARTIFACT_FORMAT = 'sqlite3'
 
     def __init__(
         self,
@@ -270,7 +270,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                 key = 'docno'
             if value is None:
                 value = 'score'
-            with artifact_builder(self.path, BuilderMode.create, self.artifact_type, self.artifact_format) as builder:
+            with pta.ArtifactBuilder(self) as builder:
                 builder.metadata['group'] = group
                 builder.metadata['key'] = key
                 builder.metadata['value'] = value
