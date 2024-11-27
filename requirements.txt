@@ -1,5 +1,5 @@
 python-terrier>=0.11.0
-pyterrier-alpha>=0.9.4
+pyterrier-alpha>=0.11.0
 lz4
 numpy<2.0.0
 npids>=0.0.7
