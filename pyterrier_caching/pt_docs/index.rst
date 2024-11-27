@@ -1,14 +1,15 @@
 Caching for PyTerrier
 =====================================
 
-`pyterrier-caching <https://github.com/seanmacavaney/pyterrier-caching>`__ is an extension package that
-provides several `PyTerrier <https://github.com/terrier-org/pyterrier>`__ components for caching
-intermediate results.
+``pyterrier-caching`` provides several `PyTerrier <https://github.com/terrier-org/pyterrier>`__ components
+for caching intermediate results.
 
-.. toctree::
-    :maxdepth: 1
+Quick Start
+-------------------------------------
 
-    overview
-    indexer_cache
-    retriever_cache
-    scorer_cache
+You can install ``pyterrier-caching`` with pip:
+
+.. code-block:: console
+   :caption: Install ``pyterrier-caching``
+
+   $ pip install pyterrier-caching
