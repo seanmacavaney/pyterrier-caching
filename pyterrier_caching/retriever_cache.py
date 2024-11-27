@@ -17,7 +17,7 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
     ARTIFACT_FORMAT = 'dbm.dumb'
 
     def __init__(self,
-        path: Union[str, Path],
+        path: Optional[Union[str, Path]] = None,
         retriever: Optional[pt.Transformer] = None,
         *,
         on: Optional[str] = None,

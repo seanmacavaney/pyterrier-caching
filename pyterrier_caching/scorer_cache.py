@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import hashlib
@@ -22,7 +22,7 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
     ARTIFACT_FORMAT = 'hdf5'
 
     def __init__(self,
-        path: Optional[str] = None,
+        path: Optional[Union[str, Path]] = None,
         scorer: Optional[pt.Transformer] = None,
         *,
         verbose: bool = False,
@@ -260,7 +260,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
 
     def __init__(
         self,
-        path: Optional[str] = None,
+        path: Optional[Union[str, Path]] = None,
         scorer: pt.Transformer = None,
         *,
         group: Optional[str] = None,
