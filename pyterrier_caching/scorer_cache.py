@@ -1,5 +1,6 @@
-from typing import Optional
+from typing import Optional, Union
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import hashlib
 import numpy as np
 import pandas as pd
@@ -20,7 +21,24 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
     ARTIFACT_TYPE = 'scorer_cache'
     ARTIFACT_FORMAT = 'hdf5'
 
-    def __init__(self, path, scorer=None, verbose=False):
+    def __init__(self,
+        path: Optional[Union[str, Path]] = None,
+        scorer: Optional[pt.Transformer] = None,
+        *,
+        verbose: bool = False,
+    ):
+        """ Creates a new Hdf5ScorerCache instance.
+
+        Args:
+            path: The path to the directory where the cache should be stored, or None to create a temporary cache.
+            scorer: The scorer to use to score documents that are missing from the cache.
+            verbose: Whether to print verbose output.
+        """
+        if path is None:
+            self._tmpdir = TemporaryDirectory()
+            path = Path(self._tmpdir.name) / 'cache'
+        else:
+            self._tmpdir = None
         super().__init__(path)
         meta_file_compat(path)
         self.scorer = scorer
@@ -84,7 +102,7 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
     def cached_retriever(self, num_results: int = 1000) -> pt.Transformer:
         return Hdf5ScorerCacheRetriever(self, num_results)
 
-    def close(self):
+    def close(self, delete_tmp: bool = True):
         """ Closes this cache, releasing the file pointer that it holds and writing any new results to disk. """
         if self.file is not None:
             self.dataset_cache = {} # reset the dataset cache
@@ -92,6 +110,9 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
             self.file = None
         if self.meta is not None:
             self.meta = None
+        if self._tmpdir is not None and delete_tmp:
+            self._tmpdir.cleanup()
+            self._tmpdir = None
 
     def __enter__(self):
         return self
@@ -175,7 +196,7 @@ class Hdf5ScorerCacheScorer(pt.Transformer):
             if self.cache.scorer is None:
                 raise LookupError('values missing from cache, but no scorer provided')
             scored = self.cache.scorer(inp.loc[to_score_idxs])
-            self.cache.close()
+            self.cache.close(delete_tmp=False)
             with h5py.File(self.cache.path/'data.h5', 'a') as fout:
                 records = scored[['query', 'docno', 'score']]
                 for query, group in records.groupby('query'):
@@ -239,7 +260,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
 
     def __init__(
         self,
-        path: str,
+        path: Optional[Union[str, Path]] = None,
         scorer: pt.Transformer = None,
         *,
         group: Optional[str] = None,
@@ -252,12 +273,17 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         If a cache does not yet exist at the provided ``path``, a new one is created.
 
         Args:
-            path: The path to the directory where the cache should be stored.
+            path: The path to the directory where the cache should be stored, or None to create a temporary cache.
             scorer: The scorer to use to score documents that are missing from the cache.
             group: The name of the column in the input DataFrame that contains the group identifier (default: ``query``)
             key: The name of the column in the input DataFrame that contains the document identifier (default: ``docno``)
             value: The name of the column in the input DataFrame that contains the value to cache (default: ``score``)
         """
+        if path is None:
+            self._tmpdir = TemporaryDirectory()
+            path = Path(self._tmpdir.name) / 'cache'
+        else:
+            self._tmpdir = None
         super().__init__(path)
         meta_file_compat(path)
         self.scorer = scorer
@@ -303,6 +329,9 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         if self.db is not None:
             self.db.close()
             self.db = None
+        if self._tmpdir is not None:
+            self._tmpdir.cleanup()
+            self._tmpdir = None
 
     @contextmanager
     def _cursor(self):

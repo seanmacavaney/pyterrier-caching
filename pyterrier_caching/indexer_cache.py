@@ -18,7 +18,7 @@ class Lz4PickleIndexerCache(pta.Artifact, pt.Indexer):
     ARTIFACT_TYPE = 'indexer_cache'
     ARTIFACT_FORMAT = 'lz4pickle'
 
-    def __init__(self, path: Optional[str] = None):
+    def __init__(self, path: Optional[Union[str, Path]] = None):
         if path is None:
             self._tmpdir = TemporaryDirectory()
             path = Path(self._tmpdir.name) / 'cache'

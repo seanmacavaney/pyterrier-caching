@@ -1,5 +1,6 @@
 from typing import Optional, Union
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import hashlib
 import lz4.frame
 import pandas as pd
@@ -16,10 +17,17 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
     ARTIFACT_FORMAT = 'dbm.dumb'
 
     def __init__(self,
-                 path: Union[str, Path],
-                 retriever: Optional[pt.Transformer] = None,
-                 on: Optional[str] = None,
-                 verbose: bool = False):
+        path: Optional[Union[str, Path]] = None,
+        retriever: Optional[pt.Transformer] = None,
+        *,
+        on: Optional[str] = None,
+        verbose: bool = False
+    ):
+        if path is None:
+            self._tmpdir = TemporaryDirectory()
+            path = Path(self._tmpdir.name) / 'cache'
+        else:
+            self._tmpdir = None
         super().__init__(path)
         meta_file_compat(path)
         self.on = on
@@ -88,6 +96,21 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
                 self.meta = json.load(fin)
         assert self.meta['type'] == self.ARTIFACT_TYPE
         assert self.meta['format'] == self.ARTIFACT_FORMAT
+
+    def close(self):
+        if self.file is not None:
+            self.file.close()
+            self.file = None
+            self.file_name = None
+        if self._tmpdir is not None:
+            self._tmpdir.cleanup()
+            self._tmpdir = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
 
     def __repr__(self):
         return f'DbmRetrieverCache({repr(str(self.path))}, {self.retriever})'
