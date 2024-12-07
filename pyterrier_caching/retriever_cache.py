@@ -12,6 +12,7 @@ from pyterrier_caching import meta_file_compat
 
 
 class DbmRetrieverCache(pta.Artifact, pt.Transformer):
+    """A :class:`~pyterrier_caching.RetrieverCache` that stores retrieved results in ``dbm.dumb`` database files."""
     ARTIFACT_TYPE = 'retriever_cache'
     ARTIFACT_FORMAT = 'dbm.dumb'
 
@@ -20,6 +21,13 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
                  retriever: Optional[pt.Transformer] = None,
                  on: Optional[str] = None,
                  verbose: bool = False):
+        """
+        Args:
+            path: The path to the cache.
+            retriever: The retriever that is cached.
+            on: The column(s) to use as the key for the cache. If None, all columns will be used.
+            verbose: If True, print progress information.
+        """
         super().__init__(path)
         meta_file_compat(path)
         self.on = on
@@ -32,7 +40,7 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
             with pta.ArtifactBuilder(self):
                 pass # just create the artifact
 
-    def transform(self, inp):
+    def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
         if self.on is not None:
             if isinstance(self.on, str):
                 assert self.on in inp.columns

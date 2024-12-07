@@ -11,16 +11,28 @@ from collections import defaultdict
 from contextlib import closing, contextmanager
 from more_itertools import chunked
 from npids import Lookup
-from deprecated import deprecated
 from pyterrier_caching import meta_file_compat
 import pyterrier_alpha as pta
 
 
 class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
+    """A cache for storing and retrieving scores for documents, backed by an HDF5 file. 
+
+    This is a *dense* scorer cache, meaning that space for all documents is allocated ahead of time.
+    Dense caches are more suitable than sparse ones when a large proportion of the corpus (or
+    the entire corpus) is expected to be scored. If only a small proportion of the corpus is expected
+    to be scored, a sparse cache (e.g., :class:`~pyterrier_caching.Sqlite3ScorerCache`) may be more appropriate.
+    """
     ARTIFACT_TYPE = 'scorer_cache'
     ARTIFACT_FORMAT = 'hdf5'
 
     def __init__(self, path, scorer=None, verbose=False):
+        """
+        Args:
+            path: The path to the directory where the cache should be stored.
+            scorer: The scorer to use to score documents that are missing from the cache.
+            verbose: Whether to print verbose output when scoring documents.
+        """
         super().__init__(path)
         meta_file_compat(path)
         self.scorer = scorer
@@ -34,9 +46,11 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
         return self.cached_scorer()(inp)
 
     def built(self) -> bool:
+        """Returns whether this cache has been built."""
         return (Path(self.path)/'pt_meta.json').exists()
 
     def build(self, corpus_iter=None, docnos_file=None):
+        """Builds this cache."""
         assert not self.built(), "this cache is alrady built"
         assert corpus_iter is not None or docnos_file is not None
         import h5py
@@ -71,7 +85,8 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
             self.dataset_cache[qid] = self.file[qid][:]
         return self.dataset_cache[qid]
 
-    def corpus_count(self):
+    def corpus_count(self) -> int:
+        """Returns the number of documents in the corpus that this cache was built from."""
         self._ensure_built()
         return self.meta['doc_count']
 
@@ -79,9 +94,14 @@ class Hdf5ScorerCache(pta.Artifact, pt.Transformer):
         return f'Hdf5ScorerCache({repr(str(self.path))}, {self.scorer})'
 
     def cached_scorer(self) -> pt.Transformer:
+        """Returns a scorer that uses this cache to store and retrieve scores."""
         return Hdf5ScorerCacheScorer(self)
 
     def cached_retriever(self, num_results: int = 1000) -> pt.Transformer:
+        """Returns a retriever that uses this cache to store and retrieve scores for every document in the corpus.
+
+        This transformer will raie an error if the entire corpus is not scored (e.g., from :meth:`score_all`).
+        """
         return Hdf5ScorerCacheRetriever(self, num_results)
 
     def close(self):
@@ -232,7 +252,12 @@ class Hdf5ScorerCacheRetriever(pt.Transformer):
 
 
 class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
-    """ A cache for storing and retrieving scores for documents, backed by a SQLite3 database. """
+    """A cache for storing and retrieving scores for documents, backed by a SQLite3 database.
+
+    This is a *sparse* scorer cache, meaning that space is only allocated for documents that have been scored.
+    If a large proportion of the corpus is expected to be scored, a dense cache (e.g., :class:`~pyterrier_caching.Hdf5ScorerCache`)
+    may be more appropriate.
+    """
 
     ARTIFACT_TYPE = 'scorer_cache'
     ARTIFACT_FORMAT = 'sqlite3'
@@ -247,16 +272,15 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         value: Optional[str] = None,
         verbose: bool = False
     ):
-        """ Creates a new Sqlite3ScorerCache instance.
-
-        If a cache does not yet exist at the provided ``path``, a new one is created.
-
+        """
         Args:
             path: The path to the directory where the cache should be stored.
             scorer: The scorer to use to score documents that are missing from the cache.
             group: The name of the column in the input DataFrame that contains the group identifier (default: ``query``)
             key: The name of the column in the input DataFrame that contains the document identifier (default: ``docno``)
             value: The name of the column in the input DataFrame that contains the value to cache (default: ``score``)
+
+        If a cache does not yet exist at the provided ``path``, a new one is created.
         """
         super().__init__(path)
         meta_file_compat(path)
@@ -381,15 +405,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
     def __repr__(self):
         return f'Sqlite3ScorerCache({str(self.path)!r}, {self.scorer!r}, group={self.group!r}, key={self.key!r})'
 
-
-@deprecated(version='0.2.0', reason='ScorerCache will be switched from the dense `Hdf5ScorerCache` implementation to '
-                                    'the sparse `Sqlite3ScorerCache` in a future version, which may break '
-                                    'functionality that relies on it being a dense cache. Switch to DenseScorerCache '
-                                    'to resolve this warning.')
-class DeprecatedHdf5ScorerCache(Hdf5ScorerCache):
-    pass
-
 # Default implementations
-ScorerCache = DeprecatedHdf5ScorerCache
+ScorerCache = Sqlite3ScorerCache
 DenseScorerCache = Hdf5ScorerCache
 SparseScorerCache = Sqlite3ScorerCache
