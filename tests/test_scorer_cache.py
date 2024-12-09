@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import tempfile
 import unittest
@@ -291,3 +292,21 @@ class TestSparseScorerCache(unittest.TestCase):
                         {'qid': 'b', 'query': 'a', 'docno': '1'},
                         {'qid': 'c', 'query': 'c', 'docno': '1'},
                     ]))
+    def test_features(self):
+        with tempfile.TemporaryDirectory() as d:
+            feat_1 = pt.apply.doc_features(lambda row: np.array([0.2, 0.1]) if row["qid"] == "q1" else  np.array([0.4, 0.3]))
+            d = Path(d)
+            cache = pyterrier_caching.SparseScorerCache(d/'cache', feat_1, value="features", pickle=True)
+            
+            df1 = pd.DataFrame([{'qid' : 'q1', 'query' : 'a', 'docno' : 'd1'}])
+            res = cache.transform(df1)
+            res1c = cache.transform(df1)
+            self.assertEqual(0.2, res1c.iloc[0]["features"][0])
+            pd.testing.assert_frame_equal(res, res1c)
+
+            df2 = pd.DataFrame([{'qid' : 'q2', 'query' : 'ab', 'docno' : 'd1'}])
+            res = cache.transform(df2)
+            res1c = cache.transform(df2)
+            self.assertEqual(0.4, res1c.iloc[0]["features"][0])
+            pd.testing.assert_frame_equal(res, res1c)
+        

@@ -1,6 +1,7 @@
 from typing import Optional
 from pathlib import Path
 import hashlib
+import pickle
 import numpy as np
 import pandas as pd
 import pyterrier as pt
@@ -270,7 +271,8 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         group: Optional[str] = None,
         key: Optional[str] = None,
         value: Optional[str] = None,
-        verbose: bool = False
+        pickle : Optional[bool] = None,
+        verbose: bool = False,
     ):
         """
         Args:
@@ -279,8 +281,12 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
             group: The name of the column in the input DataFrame that contains the group identifier (default: ``query``)
             key: The name of the column in the input DataFrame that contains the document identifier (default: ``docno``)
             value: The name of the column in the input DataFrame that contains the value to cache (default: ``score``)
+            pickle: Whether to pickle the value before storing it in the cache (default: False)
+            verbose: Whether to print verbose output when scoring documents.
 
         If a cache does not yet exist at the provided ``path``, a new one is created.
+
+        .. versionchanged:: 0.3.0 added ``pickle`` option to support caching non-numeric values
         """
         super().__init__(path)
         meta_file_compat(path)
@@ -298,13 +304,15 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                 builder.metadata['group'] = group
                 builder.metadata['key'] = key
                 builder.metadata['value'] = value
+                builder.metadata['pickle'] = pickle
                 self.db = sqlite3.connect(builder.path/'db.sqlite3')
+                value_type = "BLOB" if pickle else "NUMERIC"
                 with closing(self.db.cursor()) as cursor:
-                    cursor.execute("""
+                    cursor.execute(f"""
                         CREATE TABLE IF NOT EXISTS cache (
                           [group] TEXT NOT NULL,
                           key TEXT NOT NULL,
-                          value NUMERIC NOT NULL,
+                          value {value_type} NOT NULL,
                           PRIMARY KEY ([group], key)
                         )
                     """)
@@ -312,6 +320,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
             self.db = sqlite3.connect(self.path/'db.sqlite3')
         with (Path(self.path)/'pt_meta.json').open('rt') as fin:
             self.meta = json.load(fin)
+        self.meta.setdefault('pickle', False)
         if group is not None:
             assert group == self.meta['group'], f'group={group!r} provided, but index created with group={self.meta["group"]!r}'
         self.group = self.meta['group']
@@ -321,6 +330,9 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         if value is not None:
             assert value == self.meta['value'], f'value={value!r} provided, but index created with value={self.meta["value"]!r}'
         self.value = self.meta['value']
+        if pickle is not None:
+            assert pickle == self.meta['pickle'], f'pickle={pickle!r} provided, but index created with pickle={self.meta["pickle"]!r}'
+        self.pickle = self.meta['pickle']
 
     def close(self):
         """ Closes this cache, releasing the sqlite connection that it holds. """
@@ -348,7 +360,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         to_score_map = {}
 
         inp = inp.reset_index(drop=True)
-        values = pd.Series(index=inp.index, dtype=float)
+        values = pd.Series(index=inp.index, dtype=object if self.pickle else float)
 
         # First pass: load what we can from cache
         for group_key, group in inp.groupby(self.group):
@@ -361,7 +373,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                     [group_key] + group[self.key].tolist())
                 for key, score in cursor.fetchall():
                     for idx in key2idxs[key]:
-                        values[idx] = score
+                        values[idx] = pickle.loads(score) if self.pickle else score 
                     del key2idxs[key]
             for key, idxs in key2idxs.items():
                 to_score_idxs.extend(idxs)
@@ -373,8 +385,11 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                 raise LookupError('values missing from cache, but no scorer provided')
             scored = self.scorer(inp.loc[to_score_idxs])
             records = scored[[self.group, self.key, self.value]]
+            rec_it = records.itertuples(index=False)
+            if self.pickle:
+                rec_it = [(g, k, pickle.dumps(v)) for g, k, v in rec_it]
             with closing(self.db.cursor()) as cursor:
-                cursor.executemany('INSERT INTO cache ([group], key, value) VALUES (?, ?, ?)', records.itertuples(index=False))
+                cursor.executemany('INSERT INTO cache ([group], key, value) VALUES (?, ?, ?)', rec_it)
                 self.db.commit()
             for group, key, score in records.itertuples(index=False):
                 for idx in to_score_map[group, key]:
