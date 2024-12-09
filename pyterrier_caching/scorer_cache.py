@@ -270,7 +270,8 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         group: Optional[str] = None,
         key: Optional[str] = None,
         value: Optional[str] = None,
-        verbose: bool = False
+        verbose: bool = False,
+        pickle : bool = False
     ):
         """
         Args:
@@ -287,6 +288,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         self.scorer = scorer
         self.verbose = verbose
         self.meta = None
+        self.pickle = pickle
         if not (Path(self.path)/'pt_meta.json').exists():
             if group is None:
                 group = 'query'
@@ -299,15 +301,16 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                 builder.metadata['key'] = key
                 builder.metadata['value'] = value
                 self.db = sqlite3.connect(builder.path/'db.sqlite3')
+                value_type = "TEXT" if self.pickle else "NUMERIC" # could this be a BLOB?
                 with closing(self.db.cursor()) as cursor:
                     cursor.execute("""
                         CREATE TABLE IF NOT EXISTS cache (
                           [group] TEXT NOT NULL,
                           key TEXT NOT NULL,
-                          value NUMERIC NOT NULL,
+                          value %s NOT NULL,
                           PRIMARY KEY ([group], key)
                         )
-                    """)
+                    """ % value_type)
         else:
             self.db = sqlite3.connect(self.path/'db.sqlite3')
         with (Path(self.path)/'pt_meta.json').open('rt') as fin:
@@ -320,6 +323,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         self.key = self.meta['key']
         if value is not None:
             assert value == self.meta['value'], f'value={value!r} provided, but index created with value={self.meta["value"]!r}'
+        # TODO check pickle matches value type
         self.value = self.meta['value']
 
     def close(self):
@@ -347,8 +351,10 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         to_score_idxs = []
         to_score_map = {}
 
+        import pickle
+
         inp = inp.reset_index(drop=True)
-        values = pd.Series(index=inp.index, dtype=float)
+        values = pd.Series(index=inp.index, dtype=object if self.pickle else float)
 
         # First pass: load what we can from cache
         for group_key, group in inp.groupby(self.group):
@@ -361,7 +367,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                     [group_key] + group[self.key].tolist())
                 for key, score in cursor.fetchall():
                     for idx in key2idxs[key]:
-                        values[idx] = score
+                        values[idx] = pickle.loads(score) if self.pickle else score 
                     del key2idxs[key]
             for key, idxs in key2idxs.items():
                 to_score_idxs.extend(idxs)
@@ -372,12 +378,19 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
             if self.scorer is None:
                 raise LookupError('values missing from cache, but no scorer provided')
             scored = self.scorer(inp.loc[to_score_idxs])
-            records = scored[[self.group, self.key, self.value]]
+            if self.pickle:
+                records = scored[[self.group, self.key, self.value]]
+                iterator1 = [ (g, k, pickle.dumps(v)) for (g, k, v) in records.itertuples(index=False) ]
+            else:
+                records = scored[[self.group, self.key, self.value]]
+                iterator1 = records.itertuples(index=False)
             with closing(self.db.cursor()) as cursor:
-                cursor.executemany('INSERT INTO cache ([group], key, value) VALUES (?, ?, ?)', records.itertuples(index=False))
+                cursor.executemany('INSERT INTO cache ([group], key, value) VALUES (?, ?, ?)', iterator1)
                 self.db.commit()
             for group, key, score in records.itertuples(index=False):
                 for idx in to_score_map[group, key]:
+                    print("idx=%s" % (str(idx)))
+                    print("score=%s" % (str(score)))                    
                     values[idx] = score
 
         results = inp.assign(**{self.value: values})
