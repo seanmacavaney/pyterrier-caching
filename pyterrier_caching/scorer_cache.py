@@ -303,14 +303,14 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                 self.db = sqlite3.connect(builder.path/'db.sqlite3')
                 value_type = "TEXT" if self.pickle else "NUMERIC" # could this be a BLOB?
                 with closing(self.db.cursor()) as cursor:
-                    cursor.execute("""
+                    cursor.execute(f"""
                         CREATE TABLE IF NOT EXISTS cache (
                           [group] TEXT NOT NULL,
                           key TEXT NOT NULL,
-                          value %s NOT NULL,
+                          value {value_type} NOT NULL,
                           PRIMARY KEY ([group], key)
                         )
-                    """ % value_type)
+                    """)
         else:
             self.db = sqlite3.connect(self.path/'db.sqlite3')
         with (Path(self.path)/'pt_meta.json').open('rt') as fin:
