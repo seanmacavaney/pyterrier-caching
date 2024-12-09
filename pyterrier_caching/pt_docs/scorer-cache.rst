@@ -58,6 +58,24 @@ Example:
    another_cached_pipeline = index.qld() >> cached_scorer
    another_cached_pipeline(dataset.get_topics())
 
+Advanced
+--------------------------
+
+Caching Learning-to-rank Features
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can cache learning-to-rank features by setting ``value="features"`` and ``pickle=True`` when constructing
+the cache.
+
+Example:
+
+.. code-block:: python
+   :caption: Cache learning-to-rank features with ``ScorerCache``
+
+   from pyterrier_caching import ScorerCache
+   feature_extractor = ... # a transformer that extracts features based on query and docno
+   cache = ScorerCache('mycache', feature_extractor, value="features", pickle=True)
+
 
 API Documentation
 --------------------------
