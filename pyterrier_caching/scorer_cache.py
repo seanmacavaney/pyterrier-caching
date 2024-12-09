@@ -271,8 +271,8 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         group: Optional[str] = None,
         key: Optional[str] = None,
         value: Optional[str] = None,
+        pickle : Optional[bool] = None,
         verbose: bool = False,
-        pickle : bool = False
     ):
         """
         Args:
@@ -282,6 +282,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
             key: The name of the column in the input DataFrame that contains the document identifier (default: ``docno``)
             value: The name of the column in the input DataFrame that contains the value to cache (default: ``score``)
             pickle: Whether to pickle the value before storing it in the cache (default: False)
+            verbose: Whether to print verbose output when scoring documents.
 
         If a cache does not yet exist at the provided ``path``, a new one is created.
 
@@ -305,7 +306,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                 builder.metadata['value'] = value
                 builder.metadata['pickle'] = pickle
                 self.db = sqlite3.connect(builder.path/'db.sqlite3')
-                value_type = "BLOB" if self.pickle else "NUMERIC"
+                value_type = "BLOB" if pickle else "NUMERIC"
                 with closing(self.db.cursor()) as cursor:
                     cursor.execute(f"""
                         CREATE TABLE IF NOT EXISTS cache (
