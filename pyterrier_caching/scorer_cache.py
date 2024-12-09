@@ -383,14 +383,12 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
             if self.scorer is None:
                 raise LookupError('values missing from cache, but no scorer provided')
             scored = self.scorer(inp.loc[to_score_idxs])
+            records = scored[[self.group, self.key, self.value]]
+            rec_it = records.itertuples(index=False)
             if self.pickle:
-                records = scored[[self.group, self.key, self.value]]
-                iterator1 = [ (g, k, pickle.dumps(v)) for (g, k, v) in records.itertuples(index=False) ]
-            else:
-                records = scored[[self.group, self.key, self.value]]
-                iterator1 = records.itertuples(index=False)
+                rec_it = [(g, k, pickle.dumps(v)) for g, k, v in rec_it]
             with closing(self.db.cursor()) as cursor:
-                cursor.executemany('INSERT INTO cache ([group], key, value) VALUES (?, ?, ?)', iterator1)
+                cursor.executemany('INSERT INTO cache ([group], key, value) VALUES (?, ?, ?)', rec_it)
                 self.db.commit()
             for group, key, score in records.itertuples(index=False):
                 for idx in to_score_map[group, key]:                 
