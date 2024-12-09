@@ -1,5 +1,6 @@
 from typing import Optional, Union
 from pathlib import Path
+from warnings import warn
 import hashlib
 import lz4.frame
 import pandas as pd
@@ -43,18 +44,20 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
     def transform(self, inp: pd.DataFrame) -> pd.DataFrame:
         if self.on is not None:
             if isinstance(self.on, str):
-                assert self.on in inp.columns
                 on = [self.on]
             else:
-                assert all(o in inp.columns for o in self.on)
                 on = list(self.on)
+            pta.validate.columns(inp, includes=on)
         else:
-            on = inp.columns
+            on = list(inp.columns)
         on = tuple(sorted(on))
 
         self._ensure_built(on)
         results = []
         to_retrieve = []
+        to_retrieve_hashes = []
+
+        # Step 1: Check Cache
         for i in range(len(inp)):
             row = inp.iloc[i]
             key = tuple(row[o] for o in on)
@@ -63,20 +66,41 @@ class DbmRetrieverCache(pta.Artifact, pt.Transformer):
                 stored_data = pickle.loads(lz4.frame.decompress(self.file[key_hash]))
                 results.append(pd.DataFrame(stored_data))
             else:
-                to_retrieve.append((i, key_hash))
+                to_retrieve.append(i)
+                to_retrieve_hashes.append(key_hash)
+
+        # Step 2: Retrieve and save missing results
         if to_retrieve:
             self.file.close()
             self.file = None
             with dbm.dumb.open(self.file_name, 'w') as file:
                 self.file_name = None
-                it = to_retrieve
-                if self.verbose:
-                    it = pt.tqdm(it, unit='q')
-                for i, key_hash in it:
-                    retrieved_results = self.retriever(inp.iloc[i:i+1])
+                out_cols = pta.inspect.transformer_outputs(self.retriever, list(inp.columns), strict=False)
+                if out_cols is not None and all(o in out_cols for o in on):
+                    one_at_a_time = False
+                    retrieve_phases = [to_retrieve]
+                else:
+                    warn("Running retriever one query at a time because retriever's outputs could not be determined or "
+                         f"the outputs do not contain the cache key: {on}")
+                    one_at_a_time = True
+                    retrieve_phases = [[idx] for idx in to_retrieve]
+                for i, idxs in enumerate(retrieve_phases):
+                    retrieved_results = self.retriever(inp.iloc[idxs])
+                    retrieved_results.reset_index(drop=True, inplace=True)
                     results.append(retrieved_results)
-                    stored_data = {c: retrieved_results[c].values for c in retrieved_results.columns}
-                    file[key_hash] = lz4.frame.compress(pickle.dumps(stored_data))
+                    if one_at_a_time:
+                        hash_groups = [(to_retrieve_hashes[i], retrieved_results)]
+                    else:
+                        keys = retrieved_results[list(on)].itertuples(index=False)
+                        key_hashes = [hashlib.sha256(pickle.dumps(tuple(key))).digest() for key in keys]
+                        hash_groups = retrieved_results.groupby(key_hashes)
+                    for key_hash, group in hash_groups:
+                        if isinstance(key_hash, tuple):
+                            assert len(key_hash) == 1
+                            key_hash = key_hash[0]
+                        stored_data = {c: group[c].values for c in group.columns}
+                        file[key_hash] = lz4.frame.compress(pickle.dumps(stored_data))
+
         if self.verbose:
             print(f'{self}: {len(inp)-len(to_retrieve)} hit(s), {len(to_retrieve)} miss(es)')
         return pd.concat(results, ignore_index=True)
