@@ -388,9 +388,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                 cursor.executemany('INSERT INTO cache ([group], key, value) VALUES (?, ?, ?)', iterator1)
                 self.db.commit()
             for group, key, score in records.itertuples(index=False):
-                for idx in to_score_map[group, key]:
-                    print("idx=%s" % (str(idx)))
-                    print("score=%s" % (str(score)))                    
+                for idx in to_score_map[group, key]:                 
                     values[idx] = score
 
         results = inp.assign(**{self.value: values})
