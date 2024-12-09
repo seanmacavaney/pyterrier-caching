@@ -1,6 +1,7 @@
 from typing import Optional
 from pathlib import Path
 import hashlib
+import pickle
 import numpy as np
 import pandas as pd
 import pyterrier as pt
@@ -280,15 +281,17 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
             group: The name of the column in the input DataFrame that contains the group identifier (default: ``query``)
             key: The name of the column in the input DataFrame that contains the document identifier (default: ``docno``)
             value: The name of the column in the input DataFrame that contains the value to cache (default: ``score``)
+            pickle: Whether to pickle the value before storing it in the cache (default: False)
 
         If a cache does not yet exist at the provided ``path``, a new one is created.
+
+        .. versionchanged:: 0.3.0 added ``pickle`` option to support caching non-numeric values
         """
         super().__init__(path)
         meta_file_compat(path)
         self.scorer = scorer
         self.verbose = verbose
         self.meta = None
-        self.pickle = pickle
         if not (Path(self.path)/'pt_meta.json').exists():
             if group is None:
                 group = 'query'
@@ -300,6 +303,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
                 builder.metadata['group'] = group
                 builder.metadata['key'] = key
                 builder.metadata['value'] = value
+                builder.metadata['pickle'] = pickle
                 self.db = sqlite3.connect(builder.path/'db.sqlite3')
                 value_type = "BLOB" if self.pickle else "NUMERIC"
                 with closing(self.db.cursor()) as cursor:
@@ -315,6 +319,7 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
             self.db = sqlite3.connect(self.path/'db.sqlite3')
         with (Path(self.path)/'pt_meta.json').open('rt') as fin:
             self.meta = json.load(fin)
+        self.meta.setdefault('pickle', False)
         if group is not None:
             assert group == self.meta['group'], f'group={group!r} provided, but index created with group={self.meta["group"]!r}'
         self.group = self.meta['group']
@@ -323,8 +328,10 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
         self.key = self.meta['key']
         if value is not None:
             assert value == self.meta['value'], f'value={value!r} provided, but index created with value={self.meta["value"]!r}'
-        # TODO check pickle matches value type
         self.value = self.meta['value']
+        if pickle is not None:
+            assert pickle == self.meta['pickle'], f'pickle={pickle!r} provided, but index created with pickle={self.meta["pickle"]!r}'
+        self.pickle = self.meta['pickle']
 
     def close(self):
         """ Closes this cache, releasing the sqlite connection that it holds. """
@@ -350,8 +357,6 @@ class Sqlite3ScorerCache(pta.Artifact, pt.Transformer):
 
         to_score_idxs = []
         to_score_map = {}
-
-        import pickle
 
         inp = inp.reset_index(drop=True)
         values = pd.Series(index=inp.index, dtype=object if self.pickle else float)
