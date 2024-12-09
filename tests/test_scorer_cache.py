@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import tempfile
 import unittest
@@ -292,7 +293,6 @@ class TestSparseScorerCache(unittest.TestCase):
                         {'qid': 'c', 'query': 'c', 'docno': '1'},
                     ]))
     def test_features(self):
-        import numpy as np, pandas as pd
         with tempfile.TemporaryDirectory() as d:
             feat_1 = pt.apply.doc_features(lambda row: np.array([0.2, 0.1]) if row["qid"] == "q1" else  np.array([0.4, 0.3]))
             d = Path(d)
