@@ -9,6 +9,7 @@ from collections import defaultdict
 from contextlib import closing, contextmanager
 import pyterrier_alpha as pta
 
+PICKLE_PROTOCOL = 4
 
 class Sqlite3KeyValueCache(pta.Artifact, pt.Transformer):
     """A cache for storing and retrieving scores for documents, backed by a SQLite3 database.
@@ -111,7 +112,7 @@ class Sqlite3KeyValueCache(pta.Artifact, pt.Transformer):
         to_score_map = {}
 
         inp = inp.reset_index(drop=True)
-        keys = [pickle.dumps(tuple(tup)) for tup in inp[self.key].itertuples(index=False)]
+        keys = [pickle.dumps(tuple(tup), protocol=PICKLE_PROTOCOL) for tup in inp[self.key].itertuples(index=False)]
         values = [[None] * len(inp) for _ in self.value]
 
         # First pass: load what we can from cache
@@ -137,9 +138,9 @@ class Sqlite3KeyValueCache(pta.Artifact, pt.Transformer):
                 raise LookupError('values missing from cache, but no transformer provided')
             scored = self.transformer(inp.loc[to_score_idxs])
             keys = scored[self.key]
-            keys_enc = [pickle.dumps(tuple(k)) for k in keys.itertuples(index=False)]
+            keys_enc = [pickle.dumps(tuple(k), protocol=PICKLE_PROTOCOL) for k in keys.itertuples(index=False)]
             value = scored[self.value]
-            value_enc = [pickle.dumps(tuple(v)) for v in value.itertuples(index=False)]
+            value_enc = [pickle.dumps(tuple(v), protocol=PICKLE_PROTOCOL) for v in value.itertuples(index=False)]
             with closing(self.db.cursor()) as cursor:
                 cursor.executemany('INSERT INTO cache (key, value) VALUES (?, ?)', list(zip(keys_enc, value_enc)))
                 self.db.commit()
