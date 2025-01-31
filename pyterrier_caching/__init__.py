@@ -1,4 +1,4 @@
-__version__ = '0.4.0'
+__version__ = '0.4.1'
 
 from pyterrier_caching.util import Lazy, closing_memmap, meta_file_compat
 from pyterrier_caching.indexer_cache import IndexerCache, Lz4PickleIndexerCache

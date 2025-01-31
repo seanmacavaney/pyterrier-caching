@@ -165,7 +165,7 @@ class Sqlite3KeyValueCache(pta.Artifact, pt.Transformer):
                 yield res
 
     def __repr__(self):
-        return f'Sqlite3KeyValueCache({str(self.path)!r}, {self.scorer!r}, group={self.group!r}, key={self.key!r})'
+        return f'Sqlite3KeyValueCache({str(self.path)!r}, {self.transformer!r}, key={self.key!r}, value={self.value!r})'
 
 # Default implementations
 KeyValueCache = Sqlite3KeyValueCache
